@@ -1,0 +1,146 @@
+Berikut adalah **Rencana Implementasi Frontend (Frontend Implementation Plan)** menggunakan Vite yang dipetakan secara presisi berdasarkan panduan API, skema RDBMS Postgres, dan logika backend yang telah disusun.
+
+Rencana ini dirancang secara modular agar mudah diterjemahkan ke dalam kode (baik menggunakan Svelte, Vue, atau React) dan siap dijadikan instruksi kerja.
+
+---
+
+### 1. Stack Teknologi & Library Pendukung Frontend
+
+Untuk mengimbangi backend Golang yang super cepat, sisi frontend Vite akan dilengkapi dengan:
+
+* **HTTP Client:** `axios` (untuk mempermudah penanganan token JWT secara global melalui *interceptors*).
+* **Math Rendering:** `katex` (library super ringan untuk merender string LaTeX menjadi rumus matematika).
+* **Routing:** Router bawaan framework (e.g., *Vue Router* / *Svelte Navigator* / *React Router*) dengan fitur *Navigation Guards*.
+* **State Management:** (e.g., *Pinia* / *Svelte Store* / *Redux Toolkit*) untuk menyimpan data token, data user, dan draft jawaban sementara.
+
+---
+
+### 2. Arsitektur Struktur Folder Proyek (Vite)
+
+Struktur folder yang rapi akan memisahkan logika API, komponen UI, dan halaman manajemen admin.
+
+```text
+src/
+├── assets/             # File gambar, style global, CSS KaTeX
+├── components/         # Komponen UI Reusable (Navbar, Timer, CardSoal, KaTeXParser)
+├── router/             # Konfigurasi Route & Navigation Guards (RBAC)
+├── services/           # Handler integrasi API (Axios Instance)
+│   ├── auth.js         # Endpoint Login & Register
+│   ├── peserta.js      # Endpoint Jenjang, Mapel, Ujian, History
+│   └── admin.js        # Endpoint Upload, Export, Submissions, Koreksi
+├── store/              # Global state (Status login, data profile user)
+├── views/              # Halaman Utama (Pages)
+│   ├── auth/           # Login.vue / Login.svelte
+│   ├── peserta/        # Dashboard, PilihMapel, CBTWorkspace, History, Review
+│   └── admin/          # DashboardAdmin, UploadExcel, PenilaianList, PenilaianDetail
+└── App.css / main.js   # Entry point aplikasi
+
+```
+
+---
+
+### 3. Blueprint Navigasi & Pelindung Halaman (Navigation Guards)
+
+Sistem wajib membaca payload Token JWT untuk menentukan hak akses halaman sebelum komponen dirender:
+
+* **Public Routes:** `/login`, `/register`.
+* **Peserta Routes (Guard: Role = `peserta` atau `admin`):**
+* `/` (Pilih Jenjang)
+* `/jenjang/:id/mapel` (Pilih Mata Pelajaran)
+* `/mapel/:id/bundles` (Pilih Paket Soal)
+* `/ujian/:bundle_id` (Workspace Lembar Kerja Soal)
+* `/history` (Rapor/Riwayat Nilai)
+* `/review/:bundle_id` (Pembahasan Soal)
+
+
+* **Admin Routes (Guard: STRICT Role = `admin`):**
+* `/admin/dashboard` (Daftar Bundle & Upload)
+* `/admin/koreksi` (Daftar Jawaban Siswa Pending)
+* `/admin/koreksi/:history_id` (Lembar Koreksi Manual Isian)
+
+
+
+---
+
+### 4. Detail Implementasi Halaman Demi Halaman (Views & API Mapping)
+
+#### A. Kelompok Otentikasi (Akses Publik)
+
+1. **Halaman Login**
+* **UI:** Form Input Email/Username dan Password.
+* **Aksi:** Mengirim data ke `POST /auth/login`.
+* **Logika Frontend:** Jika sukses, simpan string `token` dan `role` ke dalam `localStorage` serta global store. Jika `role === 'admin'`, arahkan (*redirect*) ke `/admin/dashboard`. Jika `role === 'peserta'`, arahkan ke `/`.
+
+
+
+#### B. Area Peserta (Siswa)
+
+1. **Halaman Pilihan Jenjang & Mapel (`/`, `/jenjang/:id/mapel`)**
+* **Komponen UI:** 3 Card Besar di halaman awal (SD, SMP, SMA).
+* **Alur Data:** Ketika Card SD diklik (ID: 1), panggil `GET /jenjang/1/mapel` untuk mengambil daftar mapel secara dinamis. Tampilkan daftar mapel tersebut dalam bentuk grid atau list.
+
+
+2. **Halaman Paket Soal (`/mapel/:id/bundles`)**
+* **Komponen UI:** Daftar paket ujian yang tersedia (e.g., "Tryout Matematika Bab 1"). Tampilkan informasi `waktu_menit`.
+* **Alur Data:** Mengambil data dari `GET /mapel/:id/bundles`. Sediakan tombol "Mulai Ujian" yang akan mengarahkan user ke halaman CBT Workspace.
+
+
+3. **Workspace Ujian / CBT Engine (`/ujian/:bundle_id`)**
+* **Komponen UI:** * *Panel Tengah:* Teks Soal, Opsi Pilihan Ganda (Radio Button A, B, C, D) atau Input Text untuk Isian Singkat.
+* *Panel Kanan/Samping:* Kotak nomor soal (Grid Navigasi) untuk melompat antar-nomor dengan penanda warna (Sudah Dijawab = Hijau, Belum = Abu-abu, Ragu-ragu = Kuning).
+* *Header:* Komponen Penghitung Waktu Mundur (*Countdown Timer*).
+
+
+* **Integrasi API:** Panggil `GET /bundles/:id/soal` saat halaman dimuat.
+* **Logika Krusial (Resilience):** Setiap kali siswa memilih/mengetik jawaban, simpan array jawaban sementara ke `localStorage` (untuk mencegah data hilang jika browser tidak sengaja ter-refresh).
+* **Aksi Submit:** Ketika tombol "Selesai Ujian" diklik, kumpulkan array jawaban dari state, lalu kirimkan ke `POST /bundles/:id/submit`. Setelah mendapat response berhasil, hapus data *cache* ujian dari `localStorage` dan arahkan siswa ke halaman `/history`.
+
+
+4. **Halaman Riwayat / Rapor (`/history`)**
+* **UI:** Tabel riwayat ujian berisi Nama Paket, Tanggal, dan Skor Akhir.
+* **Integrasi API:** Mengambil data dari `GET /users/history`.
+* **Logika UI:** Jika atribut `status` dalam JSON bernilai `"menunggu_koreksi"`, maka kolom Skor Akhir wajib menampilkan label *"Sedang Dinilai Admin"* (Tombol menuju halaman review otomatis di-nonaktifkan). Jika status `"selesai"`, tampilkan angka skor dan aktifkan tombol "Lihat Pembahasan".
+
+
+5. **Halaman Pembahasan (`/review/:bundle_id`)**
+* **UI:** Tampilan lembar soal yang mirip dengan workspace ujian, namun pilihan jawaban siswa disandingkan dengan kunci jawaban asli dan teks pembahasan soal.
+* **Integrasi API:** `GET /bundles/:id/review`.
+
+
+
+#### C. Area Dashboard Admin
+
+1. **Halaman Manajemen Paket Soal (`/admin/dashboard`)**
+* **UI:** Tabel daftar paket soal, tombol "Tambah Paket (Upload Excel)", dan tombol "Download Template/Export".
+* **Integrasi API Upload:** Form menggunakan komponen `<input type="file" accept=".xlsx">` dikirim menggunakan `multipart/form-data` menuju `POST /admin/bundles/upload`.
+* **Integrasi API Export:** Tombol export memicu *trigger* window download ke endpoint `GET /admin/bundles/:id/export`.
+* **Integrasi API Update:** Form upload ulang file yang telah diedit untuk menembak `PUT /admin/bundles/:id/update`.
+
+
+2. **Halaman Daftar Antrean Koreksi (`/admin/koreksi`)**
+* **UI:** Menampilkan daftar nama siswa dan paket soal yang berstatus `"menunggu_koreksi"`.
+* **Integrasi API:** `GET /admin/submissions?status=menunggu_koreksi`. Sediakan tombol "Periksa Jawaban".
+
+
+3. **Halaman Lembar Penilaian Manual (`/admin/koreksi/:history_id`)**
+* **UI:** Menampilkan data pertanyaan dan jawaban yang diketik oleh siswa (Khusus tipe soal isian singkat). Di sebelah baris jawaban siswa disediakan input angka untuk memasukkan skor manual.
+* **Integrasi API Ambil Data:** `GET /admin/submissions/:history_id`.
+* **Logika UI (Validasi):** Batasi input angka skor agar tidak bisa melebihi batas nilai maksimal pada properti `bobot_nilai` soal tersebut.
+* **Integrasi API Simpan:** Tombol "Simpan Nilai" akan mengirim data array skor ke `PUT /admin/submissions/:history_id/grade`. Jika berhasil, arahkan kembali admin ke halaman daftar antrean.
+
+
+
+---
+
+### 5. Komponen Khusus & Helper Logika Utama
+
+#### 1. Komponen Parser LaTeX (KaTeX Integration)
+
+Karena teks soal dari database mengandung format teks matematika seperti `$\frac{1}{2}$`, buatlah satu komponen global (misalnya `<KaTeXParser :text="data.teks_soal" />`).
+
+* **Cara kerja komponen:** Komponen ini menerima string teks, mendeteksi karakter pembungkus `$` (inline) atau `$$` (block), memisahkan teks biasa dengan rumus, lalu menggunakan fungsi `katex.renderToString()` untuk mengubah kode LaTeX menjadi elemen HTML matematika yang rapi secara instan di sisi browser siswa.
+
+#### 2. Komponen Timer (Keamanan Sisi Klien)
+
+* **Logika:** Saat komponen workspace dimuat, hitung selisih waktu antara waktu sekarang dengan batas durasi pengerjaan. Gunakan fungsi `setInterval` setiap 1 detik untuk menurunkan sisa waktu.
+* **Proteksi Akhir:** Jika hitungan mundur menyentuh angka `00:00:00`, komponen secara otomatis harus langsung memicu fungsi *Auto-Submit* untuk mengirimkan jawaban apa adanya ke backend tanpa menunggu siswa mengklik tombol selesai.
