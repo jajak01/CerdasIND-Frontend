@@ -39,34 +39,40 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <div className="auth-header">
-          <LogIn size={40} className="auth-icon" />
-          <h1>Masuk ke CerdasIND</h1>
-          <p>Selamat datang kembali! Silakan masuk ke akun Anda.</p>
+    <div className="flex items-center justify-center min-vh-100 bg-buttermilk-yellow p-8" style={{ minHeight: '100vh' }}>
+      <div className="card-elevated bg-white w-full max-w-md shadow-2xl p-12 border-none">
+        <div className="text-center mb-10">
+          <div className="inline-block p-4 bg-lemon-zest rounded-full mb-6 shadow-sm">
+            <LogIn size={32} className="text-onyx-black" />
+          </div>
+          <h1 className="text-display text-4xl mb-3">Selamat Datang</h1>
+          <p className="text-stone-grey font-medium text-sm">Masuk ke Dashboard CerdasIND</p>
         </div>
 
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && (
+          <div className="bg-error/10 border border-error/20 text-error p-4 rounded-xl text-xs font-bold uppercase tracking-widest mb-8 text-center">
+            {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
+        <form onSubmit={handleSubmit} className="space-y-8">
+          <div>
+            <label className="uppercase tracking-[0.2em] text-[10px] font-bold text-stone-grey mb-3 block">Alamat Email</label>
             <input
               type="email"
-              id="email"
+              className="bg-cloud-grey border-none focus:bg-white focus:ring-4 focus:ring-lemon-zest/30 transition-all p-4 rounded-xl"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="nama@email.com"
+              placeholder="admin@cerdasind.id"
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
+          <div>
+            <label className="uppercase tracking-[0.2em] text-[10px] font-bold text-stone-grey mb-3 block">Kata Sandi</label>
             <input
               type="password"
-              id="password"
+              className="bg-cloud-grey border-none focus:bg-white focus:ring-4 focus:ring-lemon-zest/30 transition-all p-4 rounded-xl"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -74,13 +80,19 @@ const Login: React.FC = () => {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? 'Memproses...' : 'Masuk'}
+          <button 
+            type="submit" 
+            className="btn btn-primary btn-block py-5 text-lg shadow-xl hover:-translate-y-1 active:translate-y-0 transition-all" 
+            disabled={loading}
+          >
+            {loading ? 'Mengotentikasi...' : 'Masuk Sekarang'}
           </button>
         </form>
 
-        <div className="auth-footer">
-          Belum punya akun? <Link to="/register">Daftar sekarang</Link>
+        <div className="text-center mt-12 pt-8 border-t border-ash-grey">
+          <p className="text-xs text-stone-grey font-bold uppercase tracking-widest">
+            Butuh bantuan akses? <Link to="/register" className="text-onyx-black underline decoration-lemon-zest decoration-4 underline-offset-4">Hubungi Support</Link>
+          </p>
         </div>
       </div>
     </div>

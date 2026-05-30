@@ -14,6 +14,9 @@ import AdminDashboard from '../views/admin/AdminDashboard';
 import SubmissionList from '../views/admin/SubmissionList';
 import GradeDetail from '../views/admin/GradeDetail';
 
+import StudentManagement from '../views/admin/StudentManagement';
+import SessionManagement from '../views/admin/SessionManagement';
+
 const AppRouter: React.FC = () => {
   return (
     <Routes>
@@ -77,6 +80,22 @@ const AppRouter: React.FC = () => {
         element={
           <ProtectedRoute requiredRole="admin">
             <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/students"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <StudentManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/sessions"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <SessionManagement />
           </ProtectedRoute>
         }
       />
