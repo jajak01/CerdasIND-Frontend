@@ -2,11 +2,12 @@ import type { Student, DocumentSession } from '../services/admin.service';
 
 type PdfKind = 'invoice' | 'report';
 
-type PdfSession = {
+export type PdfSession = {
   date: string;
   time: string;
   subject: string;
   note?: string;
+  notes?: string;
   price?: number;
 };
 
@@ -406,7 +407,7 @@ export const buildInvoicePdfBlob = (payload: {
     date: 'session_date' in session ? session.session_date : session.date,
     time: 'session_time' in session ? session.session_time : session.time,
     subject: session.subject,
-    note: session.note,
+    note: 'note' in session ? session.note : (session as any).notes,
     price: session.price,
   }));
 
@@ -446,7 +447,7 @@ export const buildReportPdfBlob = (payload: {
     date: 'session_date' in session ? session.session_date : session.date,
     time: 'session_time' in session ? session.session_time : session.time,
     subject: session.subject,
-    note: session.note,
+    note: 'note' in session ? session.note : (session as any).notes,
   }));
 
   return buildDocumentPdf({

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileDown, MessageCircle, ReceiptText, RotateCcw, SquareCheckBig } from 'lucide-react';
-import { adminService, type Session, type Student, type StudentDocument } from '../../services/admin.service';
-import { buildInvoicePdfBlob as generateInvoicePdfBlob, downloadBlob } from '../../utils/documentPdf';
+import { adminService, type Session, type Student, type StudentDocument, type DocumentSession } from '../../services/admin.service';
+import { buildInvoicePdfBlob as generateInvoicePdfBlob, downloadBlob, type PdfSession } from '../../utils/documentPdf';
 
 type PaidSession = Session;
 
@@ -14,12 +14,6 @@ const currencyFormatter = new Intl.NumberFormat('id-ID', {
 const dateFormatter = new Intl.DateTimeFormat('id-ID', {
   day: '2-digit',
   month: 'long',
-  year: 'numeric',
-});
-
-const shortDateFormatter = new Intl.DateTimeFormat('id-ID', {
-  day: '2-digit',
-  month: 'short',
   year: 'numeric',
 });
 
@@ -79,7 +73,13 @@ const buildMessage = (student: Student, selectedSessions: PaidSession[], documen
   ].filter(Boolean).join(' ');
 };
 
-const buildInvoicePdfBlob = (student: Student, selectedSessions: Array<{ session_date?: string; session_time?: string; date?: string; time?: string; subject: string; note?: string; price?: number }>, documentNumber: string, periodStart: string, periodEnd: string) =>
+const buildInvoicePdfBlob = (
+  student: Student,
+  selectedSessions: Array<DocumentSession | PdfSession>,
+  documentNumber: string,
+  periodStart: string,
+  periodEnd: string,
+) =>
   generateInvoicePdfBlob({
     documentNumber,
     student,
