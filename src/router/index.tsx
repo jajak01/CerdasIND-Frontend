@@ -15,6 +15,7 @@ import SubmissionList from '../views/admin/SubmissionList';
 import GradeDetail from '../views/admin/GradeDetail';
 
 import StudentManagement from '../views/admin/StudentManagement';
+import SessionAll from '../views/admin/SessionAll';
 import SessionManagement from '../views/admin/SessionManagement';
 
 const AppRouter: React.FC = () => {
@@ -93,6 +94,14 @@ const AppRouter: React.FC = () => {
       />
       <Route
         path="/admin/sessions"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <SessionAll />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/sessions/form"
         element={
           <ProtectedRoute requiredRole="admin">
             <SessionManagement />

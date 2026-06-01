@@ -55,7 +55,7 @@ const StudentManagement: React.FC = () => {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-display">Manajemen Siswa</h1>
         <button className="btn btn-primary shadow-sm" onClick={() => {
-          setCurrentStudent({});
+          setCurrentStudent({ is_active: true });
           setShowModal(true);
         }}>
           Tambah Siswa
@@ -69,6 +69,7 @@ const StudentManagement: React.FC = () => {
               <th className="p-4 font-bold uppercase tracking-widest text-xs">Nama</th>
               <th className="p-4 font-bold uppercase tracking-widest text-xs">Sekolah</th>
               <th className="p-4 font-bold uppercase tracking-widest text-xs">Kelas</th>
+              <th className="p-4 font-bold uppercase tracking-widest text-xs">Status</th>
               <th className="p-4 font-bold uppercase tracking-widest text-xs">Kontak</th>
               <th className="p-4 font-bold uppercase tracking-widest text-xs">Aksi</th>
             </tr>
@@ -80,6 +81,13 @@ const StudentManagement: React.FC = () => {
                 <td className="p-4 text-body">{s.school}</td>
                 <td className="p-4">
                   <span className="badge-pill bg-lavender-haze">{s.grade}</span>
+                </td>
+                <td className="p-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                    s.is_active ? 'bg-jade-green text-onyx-black' : 'bg-stone-grey/20 text-stone-grey'
+                  }`}>
+                    {s.is_active ? 'Aktif' : 'Non Aktif'}
+                  </span>
                 </td>
                 <td className="p-4 font-stk-gerhard text-sm tracking-tighter">{s.contact}</td>
                 <td className="p-4">
@@ -158,6 +166,17 @@ const StudentManagement: React.FC = () => {
                   value={currentStudent.address || ''}
                   onChange={e => setCurrentStudent({...currentStudent, address: e.target.value})}
                 />
+              </div>
+              <div>
+                <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Siswa</label>
+                <select
+                  className="bg-cloud-grey focus:bg-white transition-colors"
+                  value={currentStudent.is_active === false ? 'false' : 'true'}
+                  onChange={e => setCurrentStudent({...currentStudent, is_active: e.target.value === 'true'})}
+                >
+                  <option value="true">Aktif</option>
+                  <option value="false">Non Aktif</option>
+                </select>
               </div>
               <div className="flex justify-end gap-3 mt-8">
                 <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Batal</button>

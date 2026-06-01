@@ -32,21 +32,25 @@ export interface DashboardStats {
 
 export interface Student {
   id: number;
+  public_id?: string;
   name: string;
   school: string;
   grade: string;
   contact: string;
   address: string;
+  is_active: boolean;
 }
 
 export interface Session {
   id: number;
+  public_id?: string;
   student_id: number;
   student_name?: string;
   subject: string;
   date: string;
   time: string;
   price: number;
+  notes?: string;
   status: 'scheduled' | 'completed' | 'cancelled';
   payment_status: 'pending' | 'paid' | 'overdue';
 }
@@ -59,10 +63,10 @@ export const adminService = {
     try {
       const response = await api.get<any>('/admin/dashboard/stats');
       const data = response.data?.data || response.data;
-      console.log('Dashboard Stats:', data);
+      console.log('Dashboard Stats Response:', response.data);
       return data;
-    } catch (err) {
-      console.error('Error fetching dashboard stats (500):', err);
+    } catch (err: any) {
+      console.error('Error fetching dashboard stats:', err.response?.data || err.message);
       return null;
     }
   },
@@ -72,19 +76,23 @@ export const adminService = {
     try {
       const response = await api.get<any>('/admin/bundles');
       const data = response.data?.data || response.data;
-      console.log('Admin Bundles:', data);
       return Array.isArray(data) ? data : [];
-    } catch (err) {
-      console.error('Error fetching bundles:', err);
+    } catch (err: any) {
+      console.error('Error fetching bundles:', err.response?.data || err.message);
       return [];
     }
   },
 
   uploadBundle: async (formData: FormData) => {
-    const response = await api.post('/admin/bundles/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return response.data;
+    try {
+      const response = await api.post('/admin/bundles/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return response.data;
+    } catch (err: any) {
+      console.error('Error uploading bundle:', err.response?.data || err.message);
+      throw err;
+    }
   },
 
   exportBundle: async (bundleId: number) => {
@@ -103,17 +111,20 @@ export const adminService = {
 
   // Submissions & Grading
   getSubmissions: async (status?: string): Promise<Submission[]> => {
-    const params = status ? { status } : {};
-    const response = await api.get<any>('/admin/submissions', { params });
-    const data = response.data?.data || response.data;
-    console.log('Admin Submissions:', data);
-    return Array.isArray(data) ? data : [];
+    try {
+      const params = status ? { status } : {};
+      const response = await api.get<any>('/admin/submissions', { params });
+      const data = response.data?.data || response.data;
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      console.error('Error fetching submissions:', err.response?.data || err.message);
+      return [];
+    }
   },
 
   getSubmissionDetail: async (historyId: number): Promise<SubmissionDetail> => {
     const response = await api.get<any>(`/admin/submissions/${historyId}`);
     const data = response.data?.data || response.data;
-    console.log('Submission Detail:', data);
     return data;
   },
 
@@ -123,14 +134,13 @@ export const adminService = {
   },
 
   // Students
-  getStudents: async (): Promise<Student[]> => {
+  getStudents: async (filters?: { active?: boolean }): Promise<Student[]> => {
     try {
-      const response = await api.get<any>('/admin/students');
+      const response = await api.get<any>('/admin/students', { params: filters });
       const data = response.data?.data || response.data;
-      console.log('Admin Students:', data);
       return Array.isArray(data) ? data : [];
-    } catch (err) {
-      console.error('Error fetching students:', err);
+    } catch (err: any) {
+      console.error('Error fetching students:', err.response?.data || err.message);
       return [];
     }
   },
@@ -139,10 +149,9 @@ export const adminService = {
     try {
       const response = await api.get<any>(`/admin/students/${id}`);
       const data = response.data?.data || response.data;
-      console.log('Student Detail:', data);
       return data;
-    } catch (err) {
-      console.error('Error fetching student detail:', err);
+    } catch (err: any) {
+      console.error('Error fetching student detail:', err.response?.data || err.message);
       return null;
     }
   },
@@ -167,16 +176,41 @@ export const adminService = {
     try {
       const response = await api.get<any>('/admin/sessions', { params: filters });
       const data = response.data?.data || response.data;
-      console.log('Admin Sessions:', data);
+      console.log('Admin Sessions Response:', response.data);
       return Array.isArray(data) ? data : [];
-    } catch (err) {
-      console.error('Error fetching sessions (500):', err);
+    } catch (err: any) {
+      console.error('Error fetching sessions:', err.response?.data || err.message);
       return [];
     }
   },
 
   createSession: async (session: Omit<Session, 'id'>) => {
-    const response = await api.post('/admin/sessions', session);
-    return response.data;
+    try {
+      const response = await api.post('/admin/sessions', session);
+      return response.data;
+    } catch (err: any) {
+      console.error('Error creating session:', err.response?.data || err.message);
+      throw err;
+    }
+  },
+
+  updateSession: async (id: number, session: Partial<Session>) => {
+    try {
+      const response = await api.put(`/admin/sessions/${id}`, session);
+      return response.data;
+    } catch (err: any) {
+      console.error('Error updating session:', err.response?.data || err.message);
+      throw err;
+    }
+  },
+
+  deleteSession: async (id: number) => {
+    try {
+      const response = await api.delete(`/admin/sessions/${id}`);
+      return response.data;
+    } catch (err: any) {
+      console.error('Error deleting session:', err.response?.data || err.message);
+      throw err;
+    }
   },
 };
