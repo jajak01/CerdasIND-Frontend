@@ -53,6 +53,51 @@ export interface Session {
   notes?: string;
   status: 'scheduled' | 'completed' | 'cancelled';
   payment_status: 'pending' | 'paid' | 'overdue';
+  payment_date?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DocumentSession {
+  id: number;
+  document_id: number;
+  session_id?: number | null;
+  session_date: string;
+  session_time: string;
+  subject: string;
+  note?: string;
+  price: number;
+  payment_status: 'pending' | 'paid' | 'overdue';
+  created_at?: string;
+}
+
+export interface StudentDocument {
+  id: number;
+  public_id?: string;
+  document_kind: 'invoice' | 'report';
+  document_number: string;
+  student_id: number;
+  student_name?: string;
+  linked_invoice_id?: number | null;
+  linked_invoice_number?: string | null;
+  period_start: string;
+  period_end: string;
+  total_amount: number;
+  summary?: string;
+  message?: string;
+  created_by?: number | null;
+  created_at?: string;
+  updated_at?: string;
+  session_count: number;
+  sessions?: DocumentSession[];
+}
+
+export interface CreateDocumentRequest {
+  student_id: number;
+  session_ids: number[];
+  linked_invoice_id?: number;
+  summary?: string;
+  message?: string;
 }
 
 export type { Bundle };
@@ -212,5 +257,60 @@ export const adminService = {
       console.error('Error deleting session:', err.response?.data || err.message);
       throw err;
     }
+  },
+
+  // Documents
+  getInvoices: async (filters?: { studentId?: number; linkedInvoiceId?: number }): Promise<StudentDocument[]> => {
+    try {
+      const response = await api.get<any>('/admin/invoices', { params: filters });
+      const data = response.data?.data || response.data;
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      console.error('Error fetching invoices:', err.response?.data || err.message);
+      return [];
+    }
+  },
+
+  getInvoiceDetail: async (id: number): Promise<StudentDocument | null> => {
+    try {
+      const response = await api.get<any>(`/admin/invoices/${id}`);
+      const data = response.data?.data || response.data;
+      return data;
+    } catch (err: any) {
+      console.error('Error fetching invoice detail:', err.response?.data || err.message);
+      return null;
+    }
+  },
+
+  createInvoice: async (payload: CreateDocumentRequest): Promise<StudentDocument> => {
+    const response = await api.post('/admin/invoices', payload);
+    return response.data?.data || response.data;
+  },
+
+  getReports: async (filters?: { studentId?: number; linkedInvoiceId?: number }): Promise<StudentDocument[]> => {
+    try {
+      const response = await api.get<any>('/admin/reports', { params: filters });
+      const data = response.data?.data || response.data;
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      console.error('Error fetching reports:', err.response?.data || err.message);
+      return [];
+    }
+  },
+
+  getReportDetail: async (id: number): Promise<StudentDocument | null> => {
+    try {
+      const response = await api.get<any>(`/admin/reports/${id}`);
+      const data = response.data?.data || response.data;
+      return data;
+    } catch (err: any) {
+      console.error('Error fetching report detail:', err.response?.data || err.message);
+      return null;
+    }
+  },
+
+  createReport: async (payload: CreateDocumentRequest): Promise<StudentDocument> => {
+    const response = await api.post('/admin/reports', payload);
+    return response.data?.data || response.data;
   },
 };

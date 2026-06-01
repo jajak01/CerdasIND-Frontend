@@ -1,13 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { adminService, type Student } from '../../services/admin.service';
 
 const StudentManagement: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [isClosingModal, setIsClosingModal] = useState(false);
   const [currentStudent, setCurrentStudent] = useState<Partial<Student>>({});
+  const closeTimerRef = useRef<number | null>(null);
 
-  const fetchStudents = async () => {
+  const loadStudents = useCallback(async () => {
     try {
       const data = await adminService.getStudents();
       setStudents(data);
@@ -16,10 +18,92 @@ const StudentManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchStudents();
+    let isMounted = true;
+
+    void (async () => {
+      try {
+        const data = await adminService.getStudents();
+        if (isMounted) {
+          setStudents(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch students', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const closeModal = useCallback(() => {
+    if (!showModal || isClosingModal) {
+      return;
+    }
+
+    setIsClosingModal(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      setShowModal(false);
+      setIsClosingModal(false);
+      closeTimerRef.current = null;
+    }, 220);
+  }, [isClosingModal, showModal]);
+
+  const openModal = useCallback((student: Partial<Student>) => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+
+    setCurrentStudent({
+      name: '',
+      school: '',
+      grade: '',
+      contact: '',
+      address: '',
+      is_active: true,
+      ...student,
+    });
+    setIsClosingModal(false);
+    setShowModal(true);
+  }, []);
+
+  useEffect(() => {
+    if (!showModal && !isClosingModal) {
+      document.body.style.overflow = '';
+      return;
+    }
+
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeModal, isClosingModal, showModal]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,9 +114,9 @@ const StudentManagement: React.FC = () => {
       } else {
         await adminService.createStudent(currentStudent as Omit<Student, 'id'>);
       }
-      setShowModal(false);
-      fetchStudents();
-    } catch (err) {
+      closeModal();
+      loadStudents();
+    } catch {
       alert('Gagal menyimpan data');
     }
   };
@@ -41,8 +125,8 @@ const StudentManagement: React.FC = () => {
     if (confirm('Yakin ingin menghapus siswa ini?')) {
       try {
         await adminService.deleteStudent(id);
-        fetchStudents();
-      } catch (err) {
+        loadStudents();
+      } catch {
         alert('Gagal menghapus data');
       }
     }
@@ -50,59 +134,94 @@ const StudentManagement: React.FC = () => {
 
   if (loading) return <div className="container py-8">Loading...</div>;
 
+  const activeStudents = students.filter((student) => student.is_active).length;
+
   return (
-    <div className="container py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-display">Manajemen Siswa</h1>
-        <button className="btn btn-primary shadow-sm" onClick={() => {
-          setCurrentStudent({ is_active: true });
-          setShowModal(true);
-        }}>
-          Tambah Siswa
-        </button>
+    <div className="container py-8 students-page">
+      <div className="students-hero mb-8">
+        <div>
+          <p className="students-kicker">Admin Panel</p>
+          <h1 className="text-display">Manajemen Siswa</h1>
+          <p className="students-subtitle">
+            Kelola data siswa dengan tampilan tabel yang lebih rapi dan form edit yang muncul sebagai layer terpisah.
+          </p>
+        </div>
+        <div className="students-hero-actions">
+          <div className="students-stat">
+            <span className="students-stat-label">Total</span>
+            <span className="students-stat-value">{students.length}</span>
+          </div>
+          <div className="students-stat">
+            <span className="students-stat-label">Aktif</span>
+            <span className="students-stat-value">{activeStudents}</span>
+          </div>
+          <button
+            className="btn btn-primary shadow-sm"
+            onClick={() => openModal({ is_active: true })}
+          >
+            Tambah Siswa
+          </button>
+        </div>
       </div>
 
-      <div className="card-elevated overflow-x-auto bg-white border-ash-grey shadow-sm">
-        <table className="w-full text-left border-collapse">
+      <div className="students-table-shell card-elevated bg-white border-ash-grey shadow-sm">
+        <div className="students-table-toolbar">
+          <div>
+            <h2 className="students-table-title">Daftar Siswa</h2>
+            <p className="students-table-caption">Gunakan aksi edit untuk membuka form pop-out tanpa mengganggu fokus pada tabel.</p>
+          </div>
+          <div className="students-table-pill">
+            {students.length} data ditampilkan
+          </div>
+        </div>
+
+        <div className="students-table-scroll">
+          <table className="students-table w-full text-left border-collapse">
           <thead>
-            <tr className="border-b border-onyx-black/10 bg-cloud-grey">
-              <th className="p-4 font-bold uppercase tracking-widest text-xs">Nama</th>
-              <th className="p-4 font-bold uppercase tracking-widest text-xs">Sekolah</th>
-              <th className="p-4 font-bold uppercase tracking-widest text-xs">Kelas</th>
-              <th className="p-4 font-bold uppercase tracking-widest text-xs">Status</th>
-              <th className="p-4 font-bold uppercase tracking-widest text-xs">Kontak</th>
-              <th className="p-4 font-bold uppercase tracking-widest text-xs">Aksi</th>
+            <tr className="students-table-head">
+              <th className="students-th students-col-name">Nama</th>
+              <th className="students-th students-col-school">Sekolah</th>
+              <th className="students-th students-col-grade">Kelas</th>
+              <th className="students-th students-col-status">Status</th>
+              <th className="students-th students-col-contact">Kontak</th>
+              <th className="students-th students-col-actions">Aksi</th>
             </tr>
           </thead>
           <tbody>
-            {students.map(s => (
-              <tr key={s.id} className="border-b border-ash-grey hover:bg-paper-white transition-colors">
-                <td className="p-4 font-bold text-body">{s.name}</td>
-                <td className="p-4 text-body">{s.school}</td>
-                <td className="p-4">
+            {students.length === 0 ? (
+              <tr>
+                <td className="students-empty-state" colSpan={6}>
+                  Belum ada data siswa.
+                </td>
+              </tr>
+            ) : (
+              students.map((s) => (
+              <tr key={s.id} className="students-row">
+                <td className="students-td students-cell-strong">{s.name}</td>
+                <td className="students-td">{s.school}</td>
+                <td className="students-td">
                   <span className="badge-pill bg-lavender-haze">{s.grade}</span>
                 </td>
-                <td className="p-4">
+                <td className="students-td">
                   <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                     s.is_active ? 'bg-jade-green text-onyx-black' : 'bg-stone-grey/20 text-stone-grey'
                   }`}>
                     {s.is_active ? 'Aktif' : 'Non Aktif'}
                   </span>
                 </td>
-                <td className="p-4 font-stk-gerhard text-sm tracking-tighter">{s.contact}</td>
-                <td className="p-4">
-                  <div className="flex gap-4">
+                <td className="students-td font-stk-gerhard text-sm tracking-tighter">{s.contact}</td>
+                <td className="students-td">
+                  <div className="students-actions">
                     <button 
-                      className="text-onyx-black font-bold hover:underline text-xs uppercase tracking-widest"
+                      className="students-action-edit"
                       onClick={() => {
-                        setCurrentStudent(s);
-                        setShowModal(true);
+                        openModal(s);
                       }}
                     >
                       Edit
                     </button>
                     <button 
-                      className="text-error font-bold hover:underline text-xs uppercase tracking-widest"
+                      className="students-action-delete"
                       onClick={() => handleDelete(s.id)}
                     >
                       Hapus
@@ -110,16 +229,39 @@ const StudentManagement: React.FC = () => {
                   </div>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 bg-onyx-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="card-elevated bg-white w-full max-w-md border-none shadow-2xl">
-            <h2 className="text-heading-sm mb-6">{currentStudent.id ? 'Edit Siswa' : 'Tambah Siswa'}</h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
+      {(showModal || isClosingModal) && (
+        <div
+          className={`students-modal-overlay ${isClosingModal ? 'is-closing' : 'is-open'}`}
+          role="presentation"
+          onClick={closeModal}
+        >
+          <div
+            className="students-modal-panel card-elevated bg-white w-full max-w-md border-none shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="student-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="students-modal-header">
+              <div>
+                <p className="students-kicker">Form Siswa</p>
+                <h2 id="student-modal-title" className="text-heading-sm">
+                  {currentStudent.id ? 'Edit Siswa' : 'Tambah Siswa'}
+                </h2>
+              </div>
+              <button type="button" className="students-modal-close" onClick={closeModal}>
+                Tutup
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="students-form space-y-6">
               <div>
                 <label className="uppercase tracking-widest text-xs font-bold mb-2">Nama Lengkap</label>
                 <input 
@@ -179,7 +321,7 @@ const StudentManagement: React.FC = () => {
                 </select>
               </div>
               <div className="flex justify-end gap-3 mt-8">
-                <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Batal</button>
+                <button type="button" className="btn btn-outline" onClick={closeModal}>Batal</button>
                 <button type="submit" className="btn btn-primary">Simpan Data</button>
               </div>
             </form>

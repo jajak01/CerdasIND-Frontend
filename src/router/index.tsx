@@ -17,6 +17,8 @@ import GradeDetail from '../views/admin/GradeDetail';
 import StudentManagement from '../views/admin/StudentManagement';
 import SessionAll from '../views/admin/SessionAll';
 import SessionManagement from '../views/admin/SessionManagement';
+import Invoice from '../views/admin/Invoice';
+import Report from '../views/admin/Report';
 
 const AppRouter: React.FC = () => {
   return (
@@ -121,6 +123,22 @@ const AppRouter: React.FC = () => {
         element={
           <ProtectedRoute requiredRole="admin">
             <GradeDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/invoice"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <Invoice />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/report"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <Report />
           </ProtectedRoute>
         }
       />

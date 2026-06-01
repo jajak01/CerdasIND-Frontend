@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminService, type Session, type Student } from '../../services/admin.service';
 
@@ -82,7 +82,6 @@ const SessionManagement: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<number | ''>('');
-  const [selectedSessionId, setSelectedSessionId] = useState<number | ''>('');
   const [currentSession, setCurrentSession] = useState<SessionForm>(createEmptySessionForm(''));
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -90,12 +89,16 @@ const SessionManagement: React.FC = () => {
   const [updatingSessionId, setUpdatingSessionId] = useState<number | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [isClosingFormModal, setIsClosingFormModal] = useState(false);
   const pendingSessionIdRef = useRef<number | null>(null);
+  const closeFormTimerRef = useRef<number | null>(null);
 
   const queryStudentId = parseId(searchParams.get('studentId'));
   const querySessionId = parseId(searchParams.get('sessionId'));
   const activeStudents = useMemo(() => students.filter(student => student.is_active), [students]);
   const selectedStudent = activeStudents.find(student => student.id === selectedStudentId);
+  const autoOpenFormRef = useRef(Boolean(queryStudentId || querySessionId));
 
   const fetchStudents = async () => {
     try {
@@ -121,7 +124,6 @@ const SessionManagement: React.FC = () => {
   };
 
   const applySessionToForm = (session: Session) => {
-    setSelectedSessionId(session.id);
     setCurrentSession({
       id: session.id,
       student_id: session.student_id,
@@ -182,20 +184,51 @@ const SessionManagement: React.FC = () => {
     }
   };
 
-  const handleEdit = (session: Session) => {
-    if (session.student_id !== selectedStudentId) {
-      pendingSessionIdRef.current = session.id;
-      setSelectedStudentId(session.student_id);
+  const closeFormModal = useCallback(() => {
+    if (!showFormModal || isClosingFormModal) {
       return;
     }
 
-    applySessionToForm(session);
-  };
+    setIsClosingFormModal(true);
+    closeFormTimerRef.current = window.setTimeout(() => {
+      setShowFormModal(false);
+      setIsClosingFormModal(false);
+      closeFormTimerRef.current = null;
+    }, 220);
+  }, [isClosingFormModal, showFormModal]);
 
-  const resetForm = () => {
-    setSelectedSessionId('');
-    setCurrentSession(createEmptySessionForm(selectedStudentId));
-  };
+  const openNewFormModal = useCallback((studentId: number | '' = selectedStudentId) => {
+    if (closeFormTimerRef.current !== null) {
+      window.clearTimeout(closeFormTimerRef.current);
+      closeFormTimerRef.current = null;
+    }
+
+    setCurrentSession(createEmptySessionForm(studentId));
+    setEditingNoteId(null);
+    setEditNoteValue('');
+    setIsClosingFormModal(false);
+    setShowFormModal(true);
+  }, [selectedStudentId]);
+
+  const openSessionFormModal = useCallback((session: Session) => {
+    if (closeFormTimerRef.current !== null) {
+      window.clearTimeout(closeFormTimerRef.current);
+      closeFormTimerRef.current = null;
+    }
+
+    if (session.student_id !== selectedStudentId) {
+      pendingSessionIdRef.current = session.id;
+      setSelectedStudentId(session.student_id);
+      setCurrentSession(createEmptySessionForm(session.student_id));
+    } else {
+      applySessionToForm(session);
+    }
+
+    setEditingNoteId(null);
+    setEditNoteValue('');
+    setIsClosingFormModal(false);
+    setShowFormModal(true);
+  }, [selectedStudentId]);
 
   useEffect(() => {
     fetchStudents();
@@ -221,7 +254,6 @@ const SessionManagement: React.FC = () => {
   useEffect(() => {
     if (selectedStudentId === '') {
       setSessions([]);
-      setSelectedSessionId('');
       setCurrentSession(createEmptySessionForm(''));
       setEditingNoteId(null);
       setEditNoteValue('');
@@ -229,7 +261,6 @@ const SessionManagement: React.FC = () => {
     }
 
     fetchSessions(selectedStudentId);
-    setSelectedSessionId('');
     setCurrentSession(createEmptySessionForm(selectedStudentId));
   }, [selectedStudentId]);
 
@@ -245,6 +276,54 @@ const SessionManagement: React.FC = () => {
     applySessionToForm(session);
     pendingSessionIdRef.current = null;
   }, [sessions, querySessionId]);
+
+  useEffect(() => {
+    if (!autoOpenFormRef.current) return;
+    if (selectedStudentId === '' || loadingSessions) return;
+
+    if (querySessionId) {
+      const session = sessions.find(item => item.id === querySessionId);
+      if (!session) return;
+
+      openSessionFormModal(session);
+      autoOpenFormRef.current = false;
+      return;
+    }
+
+    openNewFormModal(selectedStudentId);
+    autoOpenFormRef.current = false;
+  }, [loadingSessions, openNewFormModal, openSessionFormModal, querySessionId, selectedStudentId, sessions]);
+
+  useEffect(() => {
+    if (!showFormModal && !isClosingFormModal) {
+      document.body.style.overflow = '';
+      return;
+    }
+
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeFormModal();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeFormModal, isClosingFormModal, showFormModal]);
+
+  useEffect(() => {
+    return () => {
+      if (closeFormTimerRef.current !== null) {
+        window.clearTimeout(closeFormTimerRef.current);
+        closeFormTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const sessionStats = useMemo(
     () =>
@@ -294,10 +373,10 @@ const SessionManagement: React.FC = () => {
 
       await fetchSessions(Number(studentId));
       setCurrentSession(createEmptySessionForm(Number(studentId)));
-      setSelectedSessionId('');
       setEditingNoteId(null);
       setEditNoteValue('');
-    } catch (err) {
+      closeFormModal();
+    } catch {
       alert('Gagal menyimpan data sesi');
     } finally {
       setSaving(false);
@@ -312,8 +391,10 @@ const SessionManagement: React.FC = () => {
       if (selectedStudentId !== '') {
         await fetchSessions(selectedStudentId);
       }
-      resetForm();
-    } catch (err) {
+      setCurrentSession(createEmptySessionForm(selectedStudentId));
+      setEditingNoteId(null);
+      setEditNoteValue('');
+    } catch {
       alert('Gagal menghapus sesi');
     }
   };
@@ -322,20 +403,31 @@ const SessionManagement: React.FC = () => {
 
   return (
     <div className="container py-6 md:py-8 space-y-6 md:space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-3xl">
+      <div className="session-hero">
+        <div>
+          <p className="session-kicker">Admin Panel</p>
           <h1 className="text-display">Form Sesi</h1>
-          <p className="text-muted mt-2 max-w-2xl">
-            Pilih siswa aktif, pilih sesi, lalu update detail, catatan, status sesi, dan pembayaran.
+          <p className="session-subtitle">
+            Pilih siswa aktif, lalu buka form untuk menambah sesi baru atau mengubah detail sesi yang sudah ada.
           </p>
         </div>
-        <Link to="/admin/sessions" className="btn btn-outline w-full sm:w-auto">
-          Kembali ke Semua Sesi
-        </Link>
+        <div className="session-hero-actions">
+          <Link to="/admin/sessions" className="btn btn-outline w-full sm:w-auto">
+            Kembali ke Semua Sesi
+          </Link>
+          <button
+            type="button"
+            className="btn btn-primary w-full sm:w-auto"
+            onClick={() => openNewFormModal(selectedStudentId)}
+            disabled={selectedStudentId === ''}
+          >
+            Tambah Sesi Baru
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)] items-start">
-        <aside className="card-elevated bg-white border-ash-grey shadow-sm p-5 md:p-6 lg:sticky lg:top-6">
+      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)] items-start">
+        <aside className="session-side card-elevated bg-white border-ash-grey shadow-sm p-5 md:p-6 lg:sticky lg:top-6">
           <div className="pb-4 border-b border-ash-grey">
             <h2 className="text-heading-sm">Siswa Aktif</h2>
             <p className="text-muted text-sm mt-1">Pilih satu siswa untuk memuat seluruh sesi miliknya.</p>
@@ -374,193 +466,21 @@ const SessionManagement: React.FC = () => {
                 Tidak ada siswa aktif. Aktifkan siswa di menu Manajemen Siswa terlebih dahulu.
               </p>
             )}
+
+            <div className="session-side-summary">
+              <div>
+                <span className="session-side-label">Total Sesi</span>
+                <strong>{sessionStats.total}</strong>
+              </div>
+              <div>
+                <span className="session-side-label">Filter / Siswa</span>
+                <strong>{selectedStudent ? selectedStudent.name : 'Belum dipilih'}</strong>
+              </div>
+            </div>
           </div>
         </aside>
 
         <div className="space-y-6">
-          <section className="card-elevated bg-white border-ash-grey shadow-sm p-5 md:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between pb-4 border-b border-ash-grey">
-              <div className="max-w-2xl">
-                <h2 className="text-heading-sm">{currentSession.id ? 'Edit Sesi' : 'Tambah Sesi'}</h2>
-                <p className="text-muted text-sm mt-1">
-                  Form detail ini mengikuti sesi yang dipilih dari dropdown atau dari daftar di bawah.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full md:w-auto md:min-w-[260px]">
-                <button type="button" className="btn btn-outline w-full" onClick={resetForm}>
-                  Form Baru
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary w-full"
-                  onClick={() => {
-                    if (selectedStudentId === '') return;
-                    setCurrentSession(createEmptySessionForm(selectedStudentId));
-                    setSelectedSessionId('');
-                    setEditingNoteId(null);
-                    setEditNoteValue('');
-                  }}
-                  disabled={selectedStudentId === ''}
-                >
-                  Sesi Baru
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-5">
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Pilih Sesi untuk Edit Cepat</label>
-              <select
-                className="bg-cloud-grey focus:bg-white transition-colors"
-                value={selectedSessionId}
-                onChange={e => {
-                  const sessionId = e.target.value ? Number(e.target.value) : '';
-                  setSelectedSessionId(sessionId);
-                  if (sessionId === '') {
-                    resetForm();
-                    return;
-                  }
-                  const session = sessions.find(item => item.id === sessionId);
-                  if (session) handleEdit(session);
-                }}
-                disabled={sessions.length === 0}
-              >
-                <option value="">Pilih sesi</option>
-                {sessions.map(session => (
-                  <option key={session.id} value={session.id}>
-                    {formatSessionDate(session.date)} - {session.subject} ({sessionStatusLabel[session.status]})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6 pt-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Siswa</label>
-                  <select
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.student_id}
-                    onChange={e =>
-                      setCurrentSession({
-                        ...currentSession,
-                        student_id: e.target.value ? Number(e.target.value) : '',
-                      })
-                    }
-                    required
-                    disabled={activeStudents.length === 0}
-                  >
-                    <option value="">Pilih Siswa Aktif</option>
-                    {activeStudents.map(student => (
-                      <option key={student.id} value={student.id}>
-                        {student.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Mata Pelajaran</label>
-                  <input
-                    type="text"
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.subject}
-                    onChange={e => setCurrentSession({ ...currentSession, subject: e.target.value })}
-                    placeholder="Contoh: Matematika"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Tanggal</label>
-                  <input
-                    type="date"
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.date}
-                    onChange={e => setCurrentSession({ ...currentSession, date: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Waktu</label>
-                  <input
-                    type="time"
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.time}
-                    onChange={e => setCurrentSession({ ...currentSession, time: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Harga Sesi</label>
-                  <input
-                    type="number"
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.price}
-                    onChange={e => setCurrentSession({ ...currentSession, price: Number(e.target.value) })}
-                    min="0"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Sesi</label>
-                  <select
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.status}
-                    onChange={e => setCurrentSession({ ...currentSession, status: e.target.value as Session['status'] })}
-                  >
-                    <option value="scheduled">Schedule</option>
-                    <option value="completed">Selesai</option>
-                    <option value="cancelled">Batal</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Pembayaran</label>
-                  <select
-                    className="bg-cloud-grey focus:bg-white transition-colors"
-                    value={currentSession.payment_status}
-                    onChange={e =>
-                      setCurrentSession({
-                        ...currentSession,
-                        payment_status: e.target.value as Session['payment_status'],
-                      })
-                    }
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="paid">Lunas</option>
-                    <option value="overdue">Overdue</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="uppercase tracking-widest text-xs font-bold mb-2">Catatan Sesi</label>
-                <textarea
-                  className="bg-cloud-grey focus:bg-white transition-colors h-28"
-                  value={currentSession.notes}
-                  onChange={e => setCurrentSession({ ...currentSession, notes: e.target.value })}
-                  placeholder="Tulis ringkasan materi, progres, atau catatan pembayaran..."
-                />
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2 border-t border-ash-grey">
-                <button type="button" className="btn btn-outline w-full sm:w-auto" onClick={resetForm}>
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary w-full sm:w-auto"
-                  disabled={saving || activeStudents.length === 0}
-                >
-                  {saving ? 'Menyimpan...' : currentSession.id ? 'Update Sesi' : 'Simpan Sesi'}
-                </button>
-              </div>
-            </form>
-          </section>
-
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
             <div className="card-elevated bg-white border-ash-grey shadow-sm p-4 md:p-5">
               <p className="text-muted text-xs uppercase tracking-widest font-bold">Total Sesi</p>
@@ -585,18 +505,21 @@ const SessionManagement: React.FC = () => {
           </div>
 
           <section className="card-elevated bg-white border-ash-grey shadow-sm overflow-hidden">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between p-5 md:p-6 border-b border-ash-grey">
+            <div className="session-list-toolbar p-5 md:p-6 border-b border-ash-grey">
               <div className="max-w-2xl">
                 <h2 className="text-heading-sm">
                   {selectedStudent ? `Daftar Sesi: ${selectedStudent.name}` : 'Daftar Sesi'}
                 </h2>
                 <p className="text-muted text-sm">
                   {selectedStudent
-                    ? 'Klik edit detail untuk membuka form, atau edit cepat status dan catatan langsung di kartu.'
+                    ? 'Klik edit detail untuk membuka pop-up form, atau ubah status dan catatan langsung di kartu.'
                     : 'Pilih siswa aktif untuk menampilkan sesi.'}
                 </p>
               </div>
-              <div className="text-sm text-muted">{loadingSessions ? 'Memuat sesi...' : `${sessions.length} data`}</div>
+              <div className="session-list-meta">
+                <span>{loadingSessions ? 'Memuat sesi...' : `${sessions.length} data`}</span>
+                <span>{selectedStudent ? '1 siswa aktif dipilih' : 'Belum ada siswa dipilih'}</span>
+              </div>
             </div>
 
             <div className="p-4 md:p-5 space-y-4 md:space-y-5">
@@ -761,18 +684,25 @@ const SessionManagement: React.FC = () => {
                           <button
                             type="button"
                             className="btn btn-outline btn-sm w-full"
-                            onClick={() => handleEdit(session)}
+                            onClick={() => openSessionFormModal(session)}
                           >
                             Edit Detail
                           </button>
                           <button
                             type="button"
-                            className="btn btn-outline btn-sm w-full text-error border-error/30 hover:bg-error/10"
-                            onClick={() => handleDelete(session.id)}
+                            className="btn btn-outline btn-sm w-full"
+                            onClick={() => openNewFormModal(session.student_id)}
                           >
-                            Hapus
+                            Buka Form
                           </button>
                         </div>
+                        <button
+                          type="button"
+                          className="text-error font-bold hover:underline text-xs uppercase tracking-widest"
+                          onClick={() => handleDelete(session.id)}
+                        >
+                          Hapus
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -789,6 +719,164 @@ const SessionManagement: React.FC = () => {
           </section>
         </div>
       </div>
+
+      {(showFormModal || isClosingFormModal) && (
+        <div
+          className={`session-modal-overlay ${isClosingFormModal ? 'is-closing' : 'is-open'}`}
+          role="presentation"
+          onClick={closeFormModal}
+        >
+          <div
+            className="session-modal-panel card-elevated bg-white w-full max-w-4xl border-none shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="session-form-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="session-modal-header">
+              <div>
+                <p className="session-kicker">Form Sesi</p>
+                <h2 id="session-form-title" className="text-heading-sm">
+                  {currentSession.id ? 'Edit Sesi' : 'Tambah Sesi'}
+                </h2>
+                <p className="session-subtitle session-modal-subtitle">
+                  {selectedStudent ? `${selectedStudent.name} - ${selectedStudent.school || '-'}` : 'Pilih siswa aktif untuk mulai mengisi form.'}
+                </p>
+              </div>
+              <button type="button" className="session-modal-close" onClick={closeFormModal}>
+                Tutup
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Siswa</label>
+                  <select
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.student_id}
+                    onChange={e =>
+                      setCurrentSession({
+                        ...currentSession,
+                        student_id: e.target.value ? Number(e.target.value) : '',
+                      })
+                    }
+                    required
+                    disabled={activeStudents.length === 0}
+                  >
+                    <option value="">Pilih Siswa Aktif</option>
+                    {activeStudents.map(student => (
+                      <option key={student.id} value={student.id}>
+                        {student.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Mata Pelajaran</label>
+                  <input
+                    type="text"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.subject}
+                    onChange={e => setCurrentSession({ ...currentSession, subject: e.target.value })}
+                    placeholder="Contoh: Matematika"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Tanggal</label>
+                  <input
+                    type="date"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.date}
+                    onChange={e => setCurrentSession({ ...currentSession, date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Waktu</label>
+                  <input
+                    type="time"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.time}
+                    onChange={e => setCurrentSession({ ...currentSession, time: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Harga Sesi</label>
+                  <input
+                    type="number"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.price}
+                    onChange={e => setCurrentSession({ ...currentSession, price: Number(e.target.value) })}
+                    min="0"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Sesi</label>
+                  <select
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.status}
+                    onChange={e => setCurrentSession({ ...currentSession, status: e.target.value as Session['status'] })}
+                  >
+                    <option value="scheduled">Schedule</option>
+                    <option value="completed">Selesai</option>
+                    <option value="cancelled">Batal</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Pembayaran</label>
+                  <select
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={currentSession.payment_status}
+                    onChange={e =>
+                      setCurrentSession({
+                        ...currentSession,
+                        payment_status: e.target.value as Session['payment_status'],
+                      })
+                    }
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="paid">Lunas</option>
+                    <option value="overdue">Overdue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="uppercase tracking-widest text-xs font-bold mb-2">Catatan Sesi</label>
+                <textarea
+                  className="bg-cloud-grey focus:bg-white transition-colors h-28"
+                  value={currentSession.notes}
+                  onChange={e => setCurrentSession({ ...currentSession, notes: e.target.value })}
+                  placeholder="Tulis ringkasan materi, progres, atau catatan pembayaran..."
+                />
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2 border-t border-ash-grey">
+                <button type="button" className="btn btn-outline w-full sm:w-auto" onClick={closeFormModal}>
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary w-full sm:w-auto"
+                  disabled={saving || activeStudents.length === 0}
+                >
+                  {saving ? 'Menyimpan...' : currentSession.id ? 'Update Sesi' : 'Simpan Sesi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../store/authStore';
-import { LogOut, BookOpen, History, LayoutDashboard, CheckSquare, Users, Calendar } from 'lucide-react';
+import { LogOut, BookOpen, History, LayoutDashboard, CheckSquare, Users, Calendar, FileText, NotebookPen } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const { user, logout, isAuthenticated } = useAuth();
@@ -50,6 +50,14 @@ const Navbar: React.FC = () => {
               <Link to="/admin/koreksi" className="nav-link">
                 <CheckSquare size={16} />
                 <span className="uppercase tracking-widest text-[11px] font-bold">Koreksi</span>
+              </Link>
+              <Link to="/admin/invoice" className="nav-link">
+                <FileText size={16} />
+                <span className="uppercase tracking-widest text-[11px] font-bold">Invoice</span>
+              </Link>
+              <Link to="/admin/report" className="nav-link">
+                <NotebookPen size={16} />
+                <span className="uppercase tracking-widest text-[11px] font-bold">Report</span>
               </Link>
             </>
           )}
