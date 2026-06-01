@@ -8,4 +8,18 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('katex')) {
+              return 'katex';
+            }
+            return 'vendor';
+          }
+        },
+      },
+    },
+  },
 })
