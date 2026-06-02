@@ -161,17 +161,21 @@ const SessionManagement: React.FC = () => {
     });
   };
 
-  const buildUpdatePayload = (session: Session | SessionForm, patch: Partial<SessionForm>) => ({
-    student_id: patch.student_id === undefined ? session.student_id : Number(patch.student_id),
-    subject: patch.subject ?? session.subject,
-    date: patch.date ?? (typeof session.date === 'string' ? toDateInputValue(session.date) : ''),
-    time: patch.time ?? (typeof session.time === 'string' ? toTimeInputValue(session.time) : ''),
-    price: Number(patch.price ?? session.price),
-    notes: patch.notes ?? session.notes ?? '',
-    status: patch.status ?? session.status,
-    payment_status: patch.payment_status ?? session.payment_status,
-    google_event_id: patch.google_event_id ?? session.google_event_id,
-  });
+  const buildUpdatePayload = (session: Session | SessionForm, patch: Partial<SessionForm>): Partial<Session> => {
+    const studentId = patch.student_id ?? session.student_id;
+
+    return {
+      student_id: typeof studentId === 'number' ? studentId : Number(studentId || 0),
+      subject: patch.subject ?? session.subject,
+      date: patch.date ?? (typeof session.date === 'string' ? toDateInputValue(session.date) : ''),
+      time: patch.time ?? (typeof session.time === 'string' ? toTimeInputValue(session.time) : ''),
+      price: Number(patch.price ?? session.price),
+      notes: patch.notes ?? session.notes ?? '',
+      status: patch.status ?? session.status,
+      payment_status: patch.payment_status ?? session.payment_status,
+      google_event_id: patch.google_event_id ?? session.google_event_id,
+    };
+  };
 
   const refreshSelectedFormIfNeeded = (sessionId: number, patch: Partial<SessionForm>) => {
     if (currentSession.id !== sessionId) return;
@@ -195,7 +199,7 @@ const SessionManagement: React.FC = () => {
   const commitSessionPatch = async (session: Session, patch: Partial<SessionForm>) => {
     setUpdatingSessionId(session.id);
     try {
-      const payload = buildUpdatePayload(session, patch);
+      const payload = buildUpdatePayload(session, patch) as Partial<Session>;
       await adminService.updateSession(session.id, payload);
 
       await fetchSessions(session.student_id);
@@ -230,7 +234,7 @@ const SessionManagement: React.FC = () => {
       });
 
       if (googleEventId && googleEventId !== session.google_event_id) {
-        const payload = buildUpdatePayload(session, { google_event_id: googleEventId });
+        const payload = buildUpdatePayload(session, { google_event_id: googleEventId }) as Partial<Session>;
         await adminService.updateSession(session.id, payload);
         await fetchSessions(session.student_id);
       }
@@ -458,8 +462,8 @@ const SessionManagement: React.FC = () => {
       return;
     }
 
-    let payload = {
-      student_id: Number(studentId),
+    const payload = {
+      student_id: typeof studentId === 'number' ? studentId : Number(studentId),
       subject: currentSession.subject,
       date: currentSession.date,
       time: currentSession.time,
@@ -474,9 +478,13 @@ const SessionManagement: React.FC = () => {
     try {
       if (googleConnected) {
         const googleEventId = await syncSessionToCalendar({
-          ...payload,
-          student_name: students.find(s => s.id === Number(studentId))?.name,
-          google_event_id: currentSession.google_event_id
+          subject: payload.subject,
+          date: payload.date,
+          time: payload.time,
+          notes: payload.notes,
+          student_name: students.find(s => s.id === payload.student_id)?.name,
+          google_event_id: payload.google_event_id,
+          status: payload.status
         });
         if (googleEventId) {
           payload.google_event_id = googleEventId;
@@ -484,9 +492,9 @@ const SessionManagement: React.FC = () => {
       }
 
       if (currentSession.id) {
-        await adminService.updateSession(currentSession.id, payload);
+        await adminService.updateSession(currentSession.id, payload as Partial<Session>);
       } else {
-        await adminService.createSession(payload);
+        await adminService.createSession(payload as Omit<Session, 'id'>);
       }
 
       await fetchSessions(Number(studentId));
@@ -494,6 +502,7 @@ const SessionManagement: React.FC = () => {
       setEditingNoteId(null);
       setEditNoteValue('');
       closeFormModal();
+      toast.success(currentSession.id ? 'Sesi berhasil diperbarui' : 'Sesi baru berhasil disimpan');
     } catch {
       toast.error('Gagal menyimpan data sesi');
     } finally {

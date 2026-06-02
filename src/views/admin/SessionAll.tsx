@@ -290,10 +290,8 @@ const SessionAll: React.FC = () => {
     try {
       if (currentSession.id) {
         await adminService.updateSession(currentSession.id, payload);
-        toast.success('Sesi berhasil diperbarui');
       } else {
         await adminService.createSession(payload);
-        toast.success('Sesi baru berhasil disimpan');
       }
 
       await fetchSessions(appliedFilters);
@@ -407,7 +405,6 @@ const SessionAll: React.FC = () => {
 
     try {
       await adminService.deleteSession(sessionId);
-      toast.success('Sesi berhasil dihapus');
       
       if (googleConnected && sessionToDelete?.google_event_id) {
         await deleteSessionFromCalendar(sessionToDelete.google_event_id);
