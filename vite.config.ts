@@ -9,14 +9,30 @@ export default defineConfig({
     babel({ presets: [reactCompilerPreset()] })
   ],
   build: {
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('katex')) {
-              return 'katex';
+            // Group React core libraries
+            if (
+              id.includes('react/') || 
+              id.includes('react-dom/') || 
+              id.includes('react-router/') || 
+              id.includes('react-router-dom/')
+            ) {
+              return '@vendor-react';
             }
-            return 'vendor';
+            // Large/Heavy libraries
+            if (id.includes('katex')) {
+              return '@vendor-katex';
+            }
+            if (id.includes('lucide-react')) {
+              return '@vendor-lucide';
+            }
+            // Everything else from node_modules gets its own chunk by package name
+            // This maximizes cache hits and keeps chunks small
+            return `@vendor-${id.toString().split('node_modules/')[1].split('/')[0].toString()}`;
           }
         },
       },
