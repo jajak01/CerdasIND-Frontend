@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { adminService, type Student } from '../../services/admin.service';
+import toast from 'react-hot-toast';
 
 const StudentManagement: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -111,13 +112,15 @@ const StudentManagement: React.FC = () => {
     try {
       if (currentStudent.id) {
         await adminService.updateStudent(currentStudent.id, currentStudent);
+        toast.success('Data siswa berhasil diperbarui');
       } else {
         await adminService.createStudent(currentStudent as Omit<Student, 'id'>);
+        toast.success('Siswa baru berhasil ditambahkan');
       }
       closeModal();
       loadStudents();
     } catch {
-      alert('Gagal menyimpan data');
+      toast.error('Gagal menyimpan data');
     }
   };
 
@@ -125,9 +128,10 @@ const StudentManagement: React.FC = () => {
     if (confirm('Yakin ingin menghapus siswa ini?')) {
       try {
         await adminService.deleteStudent(id);
+        toast.success('Data siswa berhasil dihapus');
         loadStudents();
       } catch {
-        alert('Gagal menghapus data');
+        toast.error('Gagal menghapus data');
       }
     }
   };

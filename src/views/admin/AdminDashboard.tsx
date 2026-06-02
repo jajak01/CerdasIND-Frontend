@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { adminService, type Bundle, type DashboardStats } from '../../services/admin.service';
 
 const AdminDashboard: React.FC = () => {
@@ -33,11 +34,11 @@ const AdminDashboard: React.FC = () => {
       formData.append('mapel_id', '1');
       try {
         await adminService.uploadBundle(formData);
-        alert('Upload sukses');
+        toast.success('Upload sukses');
         const updatedBundles = await adminService.getBundles();
         setBundles(updatedBundles);
       } catch (err) {
-        alert('Upload gagal');
+        toast.error('Upload gagal');
       }
     }
   };

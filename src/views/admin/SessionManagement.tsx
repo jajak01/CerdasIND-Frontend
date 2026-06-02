@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { adminService, type Session, type Student } from '../../services/admin.service';
+import { initGoogleLibrary, signInToGoogle, isGoogleAuthenticated, syncSessionToCalendar, deleteSessionFromCalendar } from '../../services/googleCalendar.service';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 type SessionForm = {
   id?: number;
@@ -12,6 +15,7 @@ type SessionForm = {
   notes: string;
   status: Session['status'];
   payment_status: Session['payment_status'];
+  google_event_id?: string;
 };
 
 const createEmptySessionForm = (studentId: number | ''): SessionForm => ({
@@ -23,6 +27,7 @@ const createEmptySessionForm = (studentId: number | ''): SessionForm => ({
   notes: '',
   status: 'scheduled',
   payment_status: 'pending',
+  google_event_id: '',
 });
 
 const formatSessionDate = (value: string) => {
@@ -91,8 +96,26 @@ const SessionManagement: React.FC = () => {
   const [editNoteValue, setEditNoteValue] = useState('');
   const [showFormModal, setShowFormModal] = useState(false);
   const [isClosingFormModal, setIsClosingFormModal] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
   const pendingSessionIdRef = useRef<number | null>(null);
   const closeFormTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    initGoogleLibrary().then(() => {
+      setGoogleConnected(isGoogleAuthenticated());
+    });
+  }, []);
+
+  const handleGoogleConnect = async () => {
+    try {
+      await signInToGoogle();
+      setGoogleConnected(true);
+      toast.success('Berhasil terhubung dengan Google Calendar!');
+    } catch (err) {
+      console.error('Failed to connect Google', err);
+      toast.error('Gagal menghubungkan Google Calendar');
+    }
+  };
 
   const queryStudentId = parseId(searchParams.get('studentId'));
   const querySessionId = parseId(searchParams.get('sessionId'));
@@ -134,18 +157,20 @@ const SessionManagement: React.FC = () => {
       notes: session.notes || '',
       status: session.status,
       payment_status: session.payment_status,
+      google_event_id: session.google_event_id,
     });
   };
 
-  const buildUpdatePayload = (session: Session, patch: Partial<SessionForm>) => ({
+  const buildUpdatePayload = (session: Session | SessionForm, patch: Partial<SessionForm>) => ({
     student_id: patch.student_id === undefined ? session.student_id : Number(patch.student_id),
     subject: patch.subject ?? session.subject,
-    date: patch.date ?? toDateInputValue(session.date),
-    time: patch.time ?? toTimeInputValue(session.time),
+    date: patch.date ?? (typeof session.date === 'string' ? toDateInputValue(session.date) : ''),
+    time: patch.time ?? (typeof session.time === 'string' ? toTimeInputValue(session.time) : ''),
     price: Number(patch.price ?? session.price),
     notes: patch.notes ?? session.notes ?? '',
     status: patch.status ?? session.status,
     payment_status: patch.payment_status ?? session.payment_status,
+    google_event_id: patch.google_event_id ?? session.google_event_id,
   });
 
   const refreshSelectedFormIfNeeded = (sessionId: number, patch: Partial<SessionForm>) => {
@@ -163,6 +188,7 @@ const SessionManagement: React.FC = () => {
       notes: patch.notes ?? prev.notes,
       status: patch.status ?? prev.status,
       payment_status: patch.payment_status ?? prev.payment_status,
+      google_event_id: patch.google_event_id ?? prev.google_event_id,
     }));
   };
 
@@ -171,6 +197,7 @@ const SessionManagement: React.FC = () => {
     try {
       const payload = buildUpdatePayload(session, patch);
       await adminService.updateSession(session.id, payload);
+
       await fetchSessions(session.student_id);
       refreshSelectedFormIfNeeded(session.id, patch);
       if (patch.notes !== undefined) {
@@ -178,9 +205,88 @@ const SessionManagement: React.FC = () => {
         setEditNoteValue('');
       }
     } catch (err) {
-      alert('Gagal mengupdate sesi');
+      toast.error('Gagal mengupdate sesi');
     } finally {
       setUpdatingSessionId(null);
+    }
+  };
+
+  const handleSyncToCalendar = async (session: Session) => {
+    if (!googleConnected) {
+      toast.error('Hubungkan ke Google Calendar terlebih dahulu.');
+      return;
+    }
+
+    setUpdatingSessionId(session.id);
+    try {
+      const googleEventId = await syncSessionToCalendar({
+        subject: session.subject,
+        date: toDateInputValue(session.date),
+        time: toTimeInputValue(session.time),
+        notes: session.notes,
+        student_name: session.student_name,
+        google_event_id: session.google_event_id,
+        status: session.status
+      });
+
+      if (googleEventId && googleEventId !== session.google_event_id) {
+        const payload = buildUpdatePayload(session, { google_event_id: googleEventId });
+        await adminService.updateSession(session.id, payload);
+        await fetchSessions(session.student_id);
+      }
+      toast.success('Berhasil sinkronisasi ke Google Calendar');
+    } catch (err) {
+      console.error('Sync failed', err);
+      toast.error('Gagal sinkronisasi ke Google Calendar');
+    } finally {
+      setUpdatingSessionId(null);
+    }
+  };
+
+  const handleSyncAllToCalendar = async () => {
+    if (!googleConnected) {
+      toast.error('Hubungkan ke Google Calendar terlebih dahulu.');
+      return;
+    }
+
+    const unsyncedSessions = sessions.filter(s => s.status !== 'cancelled');
+    if (unsyncedSessions.length === 0) {
+      toast.error('Tidak ada sesi yang perlu disinkronisasi.');
+      return;
+    }
+
+    if (!confirm(`Ingin sinkronisasi ${unsyncedSessions.length} sesi ke Google Calendar?`)) return;
+
+    setSaving(true);
+    let successCount = 0;
+    try {
+      for (const session of unsyncedSessions) {
+        try {
+          const googleEventId = await syncSessionToCalendar({
+            subject: session.subject,
+            date: toDateInputValue(session.date),
+            time: toTimeInputValue(session.time),
+            notes: session.notes,
+            student_name: session.student_name,
+            google_event_id: session.google_event_id,
+            status: session.status
+          });
+
+          if (googleEventId && googleEventId !== session.google_event_id) {
+            const payload = buildUpdatePayload(session, { google_event_id: googleEventId });
+            await adminService.updateSession(session.id, payload);
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to sync session ${session.id}`, err);
+        }
+      }
+      if (selectedStudentId !== '') {
+        await fetchSessions(selectedStudentId);
+      }
+      toast.success(`Berhasil sinkronisasi ${successCount} sesi ke Google Calendar`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -348,11 +454,11 @@ const SessionManagement: React.FC = () => {
 
     const studentId = currentSession.student_id === '' ? selectedStudentId : currentSession.student_id;
     if (studentId === '') {
-      alert('Pilih siswa aktif terlebih dahulu.');
+      toast.error('Pilih siswa aktif terlebih dahulu.');
       return;
     }
 
-    const payload = {
+    let payload = {
       student_id: Number(studentId),
       subject: currentSession.subject,
       date: currentSession.date,
@@ -361,10 +467,22 @@ const SessionManagement: React.FC = () => {
       notes: currentSession.notes,
       status: currentSession.status,
       payment_status: currentSession.payment_status,
+      google_event_id: currentSession.google_event_id,
     };
 
     setSaving(true);
     try {
+      if (googleConnected) {
+        const googleEventId = await syncSessionToCalendar({
+          ...payload,
+          student_name: students.find(s => s.id === Number(studentId))?.name,
+          google_event_id: currentSession.google_event_id
+        });
+        if (googleEventId) {
+          payload.google_event_id = googleEventId;
+        }
+      }
+
       if (currentSession.id) {
         await adminService.updateSession(currentSession.id, payload);
       } else {
@@ -377,7 +495,7 @@ const SessionManagement: React.FC = () => {
       setEditNoteValue('');
       closeFormModal();
     } catch {
-      alert('Gagal menyimpan data sesi');
+      toast.error('Gagal menyimpan data sesi');
     } finally {
       setSaving(false);
     }
@@ -386,18 +504,26 @@ const SessionManagement: React.FC = () => {
   const handleDelete = async (sessionId: number) => {
     if (!confirm('Yakin ingin menghapus sesi ini?')) return;
 
+    const sessionToDelete = sessions.find(s => s.id === sessionId);
+
     try {
       await adminService.deleteSession(sessionId);
+      
+      if (googleConnected && sessionToDelete?.google_event_id) {
+        await deleteSessionFromCalendar(sessionToDelete.google_event_id);
+      }
+
       if (selectedStudentId !== '') {
         await fetchSessions(selectedStudentId);
       }
       setCurrentSession(createEmptySessionForm(selectedStudentId));
       setEditingNoteId(null);
       setEditNoteValue('');
-    } catch {
-      alert('Gagal menghapus sesi');
-    }
-  };
+      } catch {
+      toast.error('Gagal menghapus sesi');
+      }
+      };
+
 
   if (loadingStudents) return <div className="container py-8">Loading...</div>;
 
@@ -412,8 +538,16 @@ const SessionManagement: React.FC = () => {
           </p>
         </div>
         <div className="session-hero-actions">
+          <button
+            type="button"
+            className={`btn w-full sm:w-auto flex gap-2 items-center ${googleConnected ? 'btn-success' : 'btn-outline'}`}
+            onClick={handleGoogleConnect}
+          >
+            <CalendarIcon size={18} />
+            {googleConnected ? 'Terhubung ke Google' : 'Hubungkan Google Calendar'}
+          </button>
           <Link to="/admin/sessions" className="btn btn-outline w-full sm:w-auto">
-            Kembali ke Semua Sesi
+            Semua Sesi
           </Link>
           <button
             type="button"
@@ -516,9 +650,22 @@ const SessionManagement: React.FC = () => {
                     : 'Pilih siswa aktif untuk menampilkan sesi.'}
                 </p>
               </div>
-              <div className="session-list-meta">
-                <span>{loadingSessions ? 'Memuat sesi...' : `${sessions.length} data`}</span>
-                <span>{selectedStudent ? '1 siswa aktif dipilih' : 'Belum ada siswa dipilih'}</span>
+              <div className="flex flex-col items-end gap-2">
+                <div className="session-list-meta">
+                  <span>{loadingSessions ? 'Memuat sesi...' : `${sessions.length} data`}</span>
+                  <span>{selectedStudent ? '1 siswa aktif dipilih' : 'Belum ada siswa dipilih'}</span>
+                </div>
+                {googleConnected && sessions.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-xs flex gap-2 items-center"
+                    onClick={handleSyncAllToCalendar}
+                    disabled={saving}
+                  >
+                    <CalendarIcon size={14} />
+                    Sinkron Semua ke Google
+                  </button>
+                )}
               </div>
             </div>
 
@@ -696,6 +843,17 @@ const SessionManagement: React.FC = () => {
                             Buka Form
                           </button>
                         </div>
+                        {googleConnected && (
+                          <button
+                            type="button"
+                            className={`btn btn-sm w-full flex gap-2 items-center justify-center ${session.google_event_id ? 'btn-ghost text-jade-green' : 'btn-success'}`}
+                            onClick={() => handleSyncToCalendar(session)}
+                            disabled={updatingSessionId === session.id}
+                          >
+                            <CalendarIcon size={14} />
+                            {session.google_event_id ? 'Update di Google' : 'Sync ke Google'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="text-error font-bold hover:underline text-xs uppercase tracking-widest"

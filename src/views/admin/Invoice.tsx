@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileDown, MessageCircle, ReceiptText, RotateCcw, SquareCheckBig } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { adminService, type Session, type Student, type StudentDocument, type DocumentSession } from '../../services/admin.service';
 import { buildInvoicePdfBlob as generateInvoicePdfBlob, downloadBlob, type PdfSession } from '../../utils/documentPdf';
 
@@ -241,12 +242,12 @@ const Invoice: React.FC = () => {
 
   const handleSaveData = async () => {
     if (!selectedStudent) {
-      alert('Pilih siswa terlebih dahulu.');
+      toast.error('Pilih siswa terlebih dahulu.');
       return;
     }
 
     if (selectedSessions.length === 0) {
-      alert('Pilih minimal satu sesi yang sudah lunas.');
+      toast.error('Pilih minimal satu sesi yang sudah lunas.');
       return;
     }
 
@@ -262,24 +263,24 @@ const Invoice: React.FC = () => {
       setSavedInvoices((current) => [created, ...current.filter((item) => item.id !== created.id)]);
     } catch (error) {
       console.error('Failed to save invoice data', error);
-      alert('Gagal menyimpan data invoice.');
+      toast.error('Gagal menyimpan data invoice.');
     }
   };
 
   const handleCreatePdf = async () => {
     if (!selectedStudent) {
-      alert('Pilih siswa terlebih dahulu.');
+      toast.error('Pilih siswa terlebih dahulu.');
       return;
     }
 
     if (!lastCreatedInvoice) {
-      alert('Simpan data invoice terlebih dahulu.');
+      toast.error('Simpan data invoice terlebih dahulu.');
       return;
     }
 
     const selectedSnapshots = lastCreatedInvoice.sessions || [];
     if (selectedSnapshots.length === 0) {
-      alert('Data invoice belum memiliki sesi yang tersimpan.');
+      toast.error('Data invoice belum memiliki sesi yang tersimpan.');
       return;
     }
 
@@ -305,7 +306,7 @@ const Invoice: React.FC = () => {
       downloadBlob(blob, `invoice-${lastCreatedInvoice.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
       console.error('Failed to generate invoice PDF', error);
-      alert('Gagal membuat PDF invoice.');
+      toast.error('Gagal membuat PDF invoice.');
     } finally {
       setGenerating(false);
     }
@@ -313,23 +314,23 @@ const Invoice: React.FC = () => {
 
   const handleOpenWhatsapp = () => {
     if (!selectedStudent) {
-      alert('Pilih siswa terlebih dahulu.');
+      toast.error('Pilih siswa terlebih dahulu.');
       return;
     }
 
     if (selectedSessions.length === 0) {
-      alert('Pilih minimal satu sesi yang sudah lunas.');
+      toast.error('Pilih minimal satu sesi yang sudah lunas.');
       return;
     }
 
     if (!lastCreatedInvoice) {
-      alert('Simpan invoice terlebih dahulu agar nomor invoice tercatat.');
+      toast.error('Simpan invoice terlebih dahulu agar nomor invoice tercatat.');
       return;
     }
 
     const phone = normalizeWhatsappNumber(selectedStudent.contact);
     if (!phone) {
-      alert('Kontak siswa belum valid untuk WhatsApp.');
+      toast.error('Kontak siswa belum valid untuk WhatsApp.');
       return;
     }
 
@@ -342,13 +343,13 @@ const Invoice: React.FC = () => {
     try {
       const record = await adminService.getInvoiceDetail(documentId);
       if (!record) {
-        alert('Invoice tidak ditemukan.');
+        toast.error('Invoice tidak ditemukan.');
         return;
       }
 
       const recordStudent = await adminService.getStudentDetail(record.student_id);
       if (!recordStudent) {
-        alert('Data siswa untuk invoice ini tidak ditemukan.');
+        toast.error('Data siswa untuk invoice ini tidak ditemukan.');
         return;
       }
 
@@ -362,7 +363,7 @@ const Invoice: React.FC = () => {
       downloadBlob(blob, `invoice-${record.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
       console.error('Failed to download past invoice', error);
-      alert('Gagal mengunduh invoice lama.');
+      toast.error('Gagal mengunduh invoice lama.');
     }
   };
 

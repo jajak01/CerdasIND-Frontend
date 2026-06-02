@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileDown, MessageCircle, NotebookPen, RotateCcw, SquareCheckBig } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { adminService, type Student, type StudentDocument } from '../../services/admin.service';
 import { buildReportPdfBlob as generateReportPdfBlob, downloadBlob } from '../../utils/documentPdf';
 
@@ -163,14 +164,15 @@ const Report: React.FC = () => {
 
   const handleSaveData = async () => {
     if (!selectedInvoice || !student) {
-      alert('Pilih invoice terlebih dahulu.');
+      toast.error('Pilih invoice terlebih dahulu.');
       return;
     }
 
     if (!summary.trim()) {
-      alert('Isi resume manual terlebih dahulu.');
+      toast.error('Isi resume manual terlebih dahulu.');
       return;
     }
+
 
     try {
       const payload = {
@@ -185,23 +187,23 @@ const Report: React.FC = () => {
       setSavedReports((current) => [created, ...current.filter((item) => item.id !== created.id)]);
     } catch (error) {
       console.error('Failed to save report data', error);
-      alert('Gagal menyimpan report.');
+      toast.error('Gagal menyimpan report.');
     }
   };
 
   const handleCreatePdf = async () => {
     if (!selectedInvoice || !student) {
-      alert('Pilih invoice terlebih dahulu.');
+      toast.error('Pilih invoice terlebih dahulu.');
       return;
     }
     if (!lastCreatedReport) {
-      alert('Simpan data report terlebih dahulu.');
+      toast.error('Simpan data report terlebih dahulu.');
       return;
     }
 
     const reportSessions = lastCreatedReport.sessions || [];
     if (reportSessions.length === 0) {
-      alert('Data report belum memiliki sesi yang tersimpan.');
+      toast.error('Data report belum memiliki sesi yang tersimpan.');
       return;
     }
 
@@ -221,7 +223,7 @@ const Report: React.FC = () => {
       downloadBlob(blob, `report-${lastCreatedReport.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
       console.error('Failed to generate report PDF', error);
-      alert('Gagal membuat report PDF.');
+      toast.error('Gagal membuat report PDF.');
     } finally {
       setGenerating(false);
     }
@@ -229,17 +231,17 @@ const Report: React.FC = () => {
 
   const handleOpenWhatsapp = () => {
     if (!selectedInvoice || !student) {
-      alert('Pilih invoice terlebih dahulu.');
+      toast.error('Pilih invoice terlebih dahulu.');
       return;
     }
     if (!lastCreatedReport) {
-      alert('Simpan report terlebih dahulu agar nomor report tercatat.');
+      toast.error('Simpan report terlebih dahulu agar nomor report tercatat.');
       return;
     }
 
     const phone = normalizeWhatsappNumber(student.contact);
     if (!phone) {
-      alert('Kontak siswa belum valid untuk WhatsApp.');
+      toast.error('Kontak siswa belum valid untuk WhatsApp.');
       return;
     }
 
@@ -251,14 +253,14 @@ const Report: React.FC = () => {
     try {
       const record = await adminService.getReportDetail(documentId);
       if (!record) {
-        alert('Report tidak ditemukan.');
+        toast.error('Report tidak ditemukan.');
         return;
       }
 
       const linkedInvoice = record.linked_invoice_id ? await adminService.getInvoiceDetail(record.linked_invoice_id) : null;
       const recordStudent = await adminService.getStudentDetail(record.student_id);
       if (!recordStudent) {
-        alert('Data siswa untuk report ini tidak ditemukan.');
+        toast.error('Data siswa untuk report ini tidak ditemukan.');
         return;
       }
 
@@ -271,7 +273,7 @@ const Report: React.FC = () => {
       downloadBlob(blob, `report-${record.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
       console.error('Failed to download past report', error);
-      alert('Gagal mengunduh report lama.');
+      toast.error('Gagal mengunduh report lama.');
     }
   };
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { participantService, type Soal } from '../../services/participant.service';
 import KaTeXParser from '../../components/common/KaTeXParser';
 import Timer from '../../components/participant/Timer';
@@ -73,14 +74,14 @@ const CBTWorkspace: React.FC = () => {
       navigate('/history');
     } catch (err) {
       console.error('Failed to submit', err);
-      alert('Gagal mengirim jawaban. Silakan coba lagi.');
+      toast.error('Gagal mengirim jawaban. Silakan coba lagi.');
     } finally {
       setSubmitting(false);
     }
   }, [id, jawaban, navigate, submitting]);
 
   const onTimeUp = useCallback(() => {
-    alert('Waktu ujian telah habis! Jawaban Anda akan dikirim otomatis.');
+    toast('Waktu ujian telah habis! Jawaban Anda akan dikirim otomatis.');
     handleSubmit();
   }, [handleSubmit]);
 

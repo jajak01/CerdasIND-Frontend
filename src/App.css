@@ -110,6 +110,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  padding-top: 73px; /* Height of the fixed navbar */
 }
 
 body {
@@ -273,12 +274,21 @@ label {
   color: var(--color-onyx-black);
   padding: var(--spacing-16) 0;
   border-bottom: 1px solid var(--color-onyx-black);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 73px;
+  display: flex;
+  align-items: center;
 }
 
 .nav-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
 }
 
 .nav-brand {
@@ -286,6 +296,23 @@ label {
   font-size: var(--text-heading-sm);
   letter-spacing: var(--tracking-heading-sm);
   font-weight: var(--font-weight-regular);
+  z-index: 1001;
+}
+
+.mobile-menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-onyx-black);
+  cursor: pointer;
+  padding: var(--spacing-8);
+  z-index: 1001;
+}
+
+.nav-links-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-24);
 }
 
 .nav-links {
@@ -300,10 +327,12 @@ label {
   gap: var(--spacing-8);
   font-weight: var(--font-weight-medium);
   font-size: var(--text-body-sm);
+  transition: opacity 0.2s;
 }
 
 .nav-link:hover {
   text-decoration: underline;
+  opacity: 0.8;
 }
 
 .nav-user {
@@ -319,10 +348,95 @@ label {
   border: none;
   color: var(--color-onyx-black);
   padding: var(--spacing-4);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+}
+
+.logout-text {
+  display: none; /* Only show on mobile */
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .logout-btn:hover {
   color: var(--color-cool-grey);
+}
+
+@media (max-width: 900px) {
+  .mobile-menu-toggle {
+    display: block;
+  }
+
+  .nav-links-container {
+    position: fixed;
+    top: 73px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--surface-buttermilk-yellow-canvas);
+    flex-direction: column;
+    padding: var(--spacing-32) var(--spacing-24);
+    gap: var(--spacing-32);
+    transform: translateX(100%);
+    transition: transform 0.3s ease-in-out;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .nav-links-container.active {
+    transform: translateX(0);
+  }
+
+  .nav-links {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: var(--spacing-24);
+  }
+
+  .nav-link {
+    font-size: var(--text-body-lg);
+    width: 100%;
+    padding: var(--spacing-8) 0;
+    border-bottom: 1px solid rgba(20, 33, 39, 0.1);
+  }
+
+  .nav-user {
+    border-left: none;
+    padding-left: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: var(--spacing-24);
+    margin-top: auto;
+    padding-top: var(--spacing-32);
+    border-top: 1px solid rgba(20, 33, 39, 0.1);
+  }
+
+  .username-badge {
+    font-size: var(--text-body-sm);
+  }
+
+  .logout-btn {
+    width: 100%;
+    padding: var(--spacing-12);
+    background-color: var(--color-onyx-black);
+    color: white;
+    border-radius: var(--radius-lg);
+    justify-content: center;
+  }
+
+  .logout-btn:hover {
+    color: white;
+    opacity: 0.9;
+  }
+
+  .logout-text {
+    display: inline;
+  }
 }
 
 /* Typography Helpers */

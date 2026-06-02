@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { adminService, type SubmissionDetail } from '../../services/admin.service';
 import KaTeXParser from '../../components/common/KaTeXParser';
 
@@ -26,7 +27,7 @@ const GradeDetail: React.FC = () => {
       await adminService.gradeSubmission(parseInt(id), penilaian);
       navigate('/admin/koreksi');
     } catch (err) {
-      alert('Gagal menyimpan nilai');
+      toast.error('Gagal menyimpan nilai');
     } finally {
       setSaving(false);
     }

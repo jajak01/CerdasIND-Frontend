@@ -54,6 +54,7 @@ export interface Session {
   status: 'scheduled' | 'completed' | 'cancelled';
   payment_status: 'pending' | 'paid' | 'overdue';
   payment_date?: string;
+  google_event_id?: string;
   created_at?: string;
   updated_at?: string;
 }
