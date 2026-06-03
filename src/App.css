@@ -847,6 +847,7 @@ label {
   flex-wrap: wrap;
   gap: var(--spacing-8);
   justify-content: flex-end;
+  align-items: center;
 }
 
 .session-filter-meta-soft span {
@@ -862,6 +863,21 @@ label {
 
 .session-filter-caption-soft {
   color: var(--color-cool-grey);
+}
+
+.session-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  padding: var(--spacing-8) var(--spacing-12);
+  border: 1px solid var(--color-ash-grey);
+  border-radius: var(--radius-buttons);
+  background: var(--surface-arctic-mist-surface);
+  color: var(--color-onyx-black);
+  font-size: var(--text-caption);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .session-divider {
@@ -917,6 +933,184 @@ label {
   padding: var(--spacing-24);
   display: grid;
   gap: var(--spacing-16);
+}
+
+.session-list-card {
+  padding: var(--spacing-20);
+  border: 1px solid var(--color-ash-grey);
+  border-radius: var(--radius-lg);
+  background: var(--surface-arctic-mist-surface);
+  box-shadow: 0 8px 20px rgba(20, 33, 39, 0.06);
+}
+
+.session-list-card-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--spacing-20);
+  align-items: start;
+}
+
+.session-note-panel {
+  padding-top: var(--spacing-16);
+  border-top: 1px solid var(--color-ash-grey);
+}
+
+.session-note-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-12);
+  margin-bottom: var(--spacing-8);
+}
+
+.session-note-edit {
+  border: none;
+  background: transparent;
+  color: var(--color-onyx-black);
+  padding: 0;
+  font-size: var(--text-caption);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.session-note-edit:hover {
+  text-decoration: underline;
+}
+
+.session-note-text {
+  max-width: 56rem;
+  margin: 0;
+  color: var(--color-cool-grey);
+  font-size: var(--text-body-sm);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.session-note-editor {
+  display: grid;
+  gap: var(--spacing-12);
+}
+
+.session-note-textarea {
+  min-height: 108px;
+  resize: vertical;
+  background: var(--color-cloud-grey);
+}
+
+.session-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-12);
+}
+
+.session-update-card {
+  width: 100%;
+  padding: var(--spacing-16);
+  border: 1px solid var(--color-ash-grey);
+  border-radius: var(--radius-lg);
+  background: var(--surface-arctic-mist-surface);
+}
+
+.session-segment-stack {
+  display: grid;
+  gap: var(--spacing-16);
+}
+
+.session-segment-label {
+  display: block;
+  margin-bottom: var(--spacing-8);
+  color: var(--color-stone-grey);
+  font-size: var(--text-caption);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.session-segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-4);
+  padding: var(--spacing-4);
+  border: 1px solid var(--color-ash-grey);
+  border-radius: var(--radius-lg);
+  background: var(--color-cloud-grey);
+}
+
+.session-segment-button {
+  min-height: 36px;
+  padding: var(--spacing-8);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-cool-grey);
+  font-size: var(--text-caption);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.session-segment-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--color-onyx-black);
+}
+
+.session-segment-button.is-active {
+  color: var(--color-onyx-black);
+  border-color: rgba(20, 33, 39, 0.22);
+  box-shadow: 0 4px 12px rgba(20, 33, 39, 0.08);
+}
+
+.session-segment-button.is-scheduled.is-active {
+  background: var(--color-dusk-blue);
+}
+
+.session-segment-button.is-completed.is-active,
+.session-segment-button.is-paid.is-active {
+  background: var(--color-jade-green);
+}
+
+.session-segment-button.is-cancelled.is-active,
+.session-segment-button.is-overdue.is-active {
+  background: rgba(214, 48, 49, 0.18);
+  color: #9f1f20;
+}
+
+.session-segment-button.is-pending.is-active {
+  background: var(--color-lemon-zest);
+}
+
+.session-segment-button:disabled {
+  cursor: default;
+}
+
+.session-row-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-12);
+  margin-top: var(--spacing-16);
+  padding-top: var(--spacing-16);
+  border-top: 1px solid var(--color-ash-grey);
+}
+
+.session-row-actions > .text-error {
+  grid-column: 1 / -1;
+}
+
+.session-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-12);
+  padding: var(--spacing-16) var(--spacing-24) var(--spacing-24);
+  border-top: 1px solid var(--color-ash-grey);
+}
+
+.session-pagination span {
+  color: var(--color-stone-grey);
+  font-size: var(--text-body-sm);
+  font-weight: var(--font-weight-semibold);
 }
 
 .session-side-summary {
@@ -1007,7 +1201,10 @@ label {
 
 .session-page-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-start;
+  align-items: center;
+  gap: var(--spacing-12);
 }
 
 .session-list-meta {
@@ -1069,6 +1266,32 @@ label {
   }
 }
 
+@media (min-width: 1280px) {
+  .session-list-card-grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+
+  .session-update-card {
+    width: 360px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1279px) {
+  .session-results-body {
+    padding: var(--spacing-20);
+  }
+
+  .session-list-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-update-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--spacing-16);
+  }
+}
+
 @media (max-width: 900px) {
   .session-hero,
   .session-filter-toolbar,
@@ -1082,6 +1305,39 @@ label {
 
   .session-modal-panel {
     padding: var(--spacing-24);
+  }
+}
+
+@media (max-width: 640px) {
+  .session-results-body {
+    padding: var(--spacing-16);
+  }
+
+  .session-list-card {
+    padding: var(--spacing-16);
+  }
+
+  .session-note-head,
+  .session-note-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .session-note-edit {
+    text-align: left;
+  }
+
+  .session-page-actions .btn,
+  .session-filter-actions .btn,
+  .session-note-actions .btn,
+  .session-pagination .btn {
+    width: 100%;
+  }
+
+  .session-row-actions,
+  .session-pagination {
+    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
 

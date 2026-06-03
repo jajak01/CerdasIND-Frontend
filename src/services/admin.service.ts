@@ -25,8 +25,8 @@ export interface DashboardStats {
   total_students: number;
   today_sessions: number;
   this_week_sessions: number;
-  pending_payments: number;
-  this_month_revenue: number;
+  pendapatan_selesai: number;
+  pendapatan_pending: number;
   total_omzet: number;
 }
 
@@ -105,9 +105,10 @@ export type { Bundle };
 
 export const adminService = {
   // Dashboard
-  getStats: async (): Promise<DashboardStats | null> => {
+  getStats: async (startDate?: string, endDate?: string): Promise<DashboardStats | null> => {
     try {
-      const response = await api.get<any>('/admin/dashboard/stats');
+      const params = { start_date: startDate, end_date: endDate };
+      const response = await api.get<any>('/admin/dashboard/stats', { params });
       const data = response.data?.data || response.data;
       console.log('Dashboard Stats Response:', response.data);
       return data;

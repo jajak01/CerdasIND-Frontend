@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { adminService, type Session, type Student } from '../../services/admin.service';
 import { initGoogleLibrary, signInToGoogle, isGoogleAuthenticated, syncSessionToCalendar, deleteSessionFromCalendar } from '../../services/googleCalendar.service';
-import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, SlidersHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type SessionFilters = {
@@ -45,7 +45,7 @@ const formatSessionTime = (value: string) => {
 };
 
 const sessionStatusLabel: Record<Session['status'], string> = {
-  scheduled: 'Schedule',
+  scheduled: 'Jadwal',
   completed: 'Selesai',
   cancelled: 'Batal',
 };
@@ -55,6 +55,20 @@ const paymentStatusLabel: Record<Session['payment_status'], string> = {
   paid: 'Lunas',
   overdue: 'Overdue',
 };
+
+const sessionsPerPage = 6;
+
+const sessionStatusOptions: Array<{ value: Session['status']; label: string; tone: string }> = [
+  { value: 'scheduled', label: 'Jadwal', tone: 'scheduled' },
+  { value: 'completed', label: 'Selesai', tone: 'completed' },
+  { value: 'cancelled', label: 'Batal', tone: 'cancelled' },
+];
+
+const paymentStatusOptions: Array<{ value: Session['payment_status']; label: string; tone: string }> = [
+  { value: 'pending', label: 'Pending', tone: 'pending' },
+  { value: 'paid', label: 'Lunas', tone: 'paid' },
+  { value: 'overdue', label: 'Overdue', tone: 'overdue' },
+];
 
 type SessionForm = {
   id?: number;
@@ -111,6 +125,11 @@ const SessionAll: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [updatingSessionId, setUpdatingSessionId] = useState<number | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editNoteValue, setEditNoteValue] = useState('');
   const closeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -144,6 +163,7 @@ const SessionAll: React.FC = () => {
 
       const data = await adminService.getSessions(params);
       setSessions(data);
+      setCurrentPage(1);
     } catch (err) {
       console.error('Failed to fetch sessions', err);
     } finally {
@@ -180,6 +200,18 @@ const SessionAll: React.FC = () => {
     [appliedFilters]
   );
 
+  const totalPages = Math.max(1, Math.ceil(sessions.length / sessionsPerPage));
+  const paginatedSessions = useMemo(() => {
+    const startIndex = (currentPage - 1) * sessionsPerPage;
+    return sessions.slice(startIndex, startIndex + sessionsPerPage);
+  }, [currentPage, sessions]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const handleFilterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAppliedFilters(draftFilters);
@@ -188,6 +220,7 @@ const SessionAll: React.FC = () => {
   const handleReset = async () => {
     setDraftFilters(initialDraftFilters);
     setAppliedFilters(initialDraftFilters);
+    setCurrentPage(1);
   };
 
   const closeModal = useCallback(() => {
@@ -416,6 +449,63 @@ const SessionAll: React.FC = () => {
     }
   };
 
+  const commitSessionPatch = async (session: Session, patch: Partial<Session>) => {
+    setUpdatingSessionId(session.id);
+    try {
+      await adminService.updateSession(session.id, {
+        student_id: session.student_id,
+        subject: session.subject,
+        date: toDateInputValue(session.date),
+        time: toTimeInputValue(session.time),
+        price: session.price,
+        notes: session.notes || '',
+        status: patch.status ?? session.status,
+        payment_status: patch.payment_status ?? session.payment_status,
+        google_event_id: patch.google_event_id ?? session.google_event_id,
+      });
+      await fetchSessions(appliedFilters);
+      toast.success('Status sesi berhasil diperbarui');
+    } catch {
+      toast.error('Gagal memperbarui status sesi');
+    } finally {
+      setUpdatingSessionId(null);
+    }
+  };
+
+  const startEditingNote = (session: Session) => {
+    setEditingNoteId(session.id);
+    setEditNoteValue(session.notes || '');
+  };
+
+  const cancelEditingNote = () => {
+    setEditingNoteId(null);
+    setEditNoteValue('');
+  };
+
+  const commitSessionNote = async (session: Session) => {
+    setUpdatingSessionId(session.id);
+    try {
+      await adminService.updateSession(session.id, {
+        student_id: session.student_id,
+        subject: session.subject,
+        date: toDateInputValue(session.date),
+        time: toTimeInputValue(session.time),
+        price: session.price,
+        notes: editNoteValue,
+        status: session.status,
+        payment_status: session.payment_status,
+        google_event_id: session.google_event_id,
+      });
+      await fetchSessions(appliedFilters);
+      cancelEditingNote();
+      toast.success('Catatan sesi berhasil diperbarui');
+    } catch {
+      toast.error('Gagal memperbarui catatan sesi');
+    } finally {
+      setUpdatingSessionId(null);
+    }
+  };
+
   if (loading || loadingStudents) return <div className="container py-8">Loading...</div>;
 
   return (
@@ -426,10 +516,10 @@ const SessionAll: React.FC = () => {
         </div>
       </div>
 
-      <div className="session-page-actions flex flex-col sm:flex-row gap-3">
+      <div className="session-page-actions">
         <button
           type="button"
-          className={`btn flex gap-2 items-center ${googleConnected ? 'btn-success' : 'btn-outline'} w-full sm:w-auto`}
+          className={`btn flex gap-2 items-center ${googleConnected ? 'btn-success' : 'btn-outline'}`}
           onClick={handleGoogleConnect}
         >
           <CalendarIcon size={18} />
@@ -438,7 +528,7 @@ const SessionAll: React.FC = () => {
         {googleConnected && sessions.length > 0 && (
           <button
             type="button"
-            className="btn btn-outline flex gap-2 items-center w-full sm:w-auto"
+            className="btn btn-outline flex gap-2 items-center"
             onClick={handleSyncAllToCalendar}
             disabled={saving}
           >
@@ -446,7 +536,7 @@ const SessionAll: React.FC = () => {
             Sinkron Semua ke Google
           </button>
         )}
-        <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={() => openNewSessionModal()}>
+        <button type="button" className="btn btn-primary" onClick={() => openNewSessionModal()}>
           Tambah Sesi Baru
         </button>
       </div>
@@ -463,78 +553,91 @@ const SessionAll: React.FC = () => {
           <div className="session-filter-meta session-filter-meta-soft">
             <span>{sessions.length} data</span>
             <span>{activeFilterCount} filter aktif</span>
-          </div>
-        </div>
-
-        <div className="session-divider" />
-
-        <div className="session-filter-body">
-          <div className="session-filter-grid">
-            <div className="session-filter-field session-filter-field-wide">
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Nama Siswa</label>
-              <input
-                type="text"
-                className="bg-cloud-grey focus:bg-white transition-colors"
-                value={draftFilters.search}
-                onChange={e => setDraftFilters({ ...draftFilters, search: e.target.value })}
-                placeholder="Cari nama atau kontak"
-              />
-            </div>
-            <div className="session-filter-field">
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Dari Tanggal</label>
-              <input
-                type="date"
-                className="bg-cloud-grey focus:bg-white transition-colors"
-                value={draftFilters.startDate}
-                onChange={e => setDraftFilters({ ...draftFilters, startDate: e.target.value })}
-              />
-            </div>
-            <div className="session-filter-field">
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Sampai Tanggal</label>
-              <input
-                type="date"
-                className="bg-cloud-grey focus:bg-white transition-colors"
-                value={draftFilters.endDate}
-                onChange={e => setDraftFilters({ ...draftFilters, endDate: e.target.value })}
-              />
-            </div>
-            <div className="session-filter-field">
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Sesi</label>
-              <select
-                className="bg-cloud-grey focus:bg-white transition-colors"
-                value={draftFilters.status}
-                onChange={e => setDraftFilters({ ...draftFilters, status: e.target.value })}
-              >
-                <option value="">Semua</option>
-                <option value="scheduled">Schedule</option>
-                <option value="completed">Selesai</option>
-                <option value="cancelled">Batal</option>
-              </select>
-            </div>
-            <div className="session-filter-field">
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Pembayaran</label>
-              <select
-                className="bg-cloud-grey focus:bg-white transition-colors"
-                value={draftFilters.paymentStatus}
-                onChange={e => setDraftFilters({ ...draftFilters, paymentStatus: e.target.value })}
-              >
-                <option value="">Semua</option>
-                <option value="pending">Pending</option>
-                <option value="paid">Lunas</option>
-                <option value="overdue">Overdue</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="session-filter-actions">
-            <button type="button" className="btn btn-outline" onClick={handleReset}>
-              Reset
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={searching}>
-              {searching ? 'Mencari...' : 'Update Data'}
+            <button
+              type="button"
+              className="session-filter-toggle"
+              onClick={() => setFiltersOpen((value) => !value)}
+              aria-expanded={filtersOpen}
+            >
+              <SlidersHorizontal size={14} />
+              {filtersOpen ? 'Tutup Filter' : 'Buka Filter'}
             </button>
           </div>
         </div>
+
+        {filtersOpen && (
+          <>
+            <div className="session-divider" />
+
+            <div className="session-filter-body">
+              <div className="session-filter-grid">
+                <div className="session-filter-field session-filter-field-wide">
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Nama Siswa</label>
+                  <input
+                    type="text"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={draftFilters.search}
+                    onChange={e => setDraftFilters({ ...draftFilters, search: e.target.value })}
+                    placeholder="Cari nama atau kontak"
+                  />
+                </div>
+                <div className="session-filter-field">
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Dari Tanggal</label>
+                  <input
+                    type="date"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={draftFilters.startDate}
+                    onChange={e => setDraftFilters({ ...draftFilters, startDate: e.target.value })}
+                  />
+                </div>
+                <div className="session-filter-field">
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Sampai Tanggal</label>
+                  <input
+                    type="date"
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={draftFilters.endDate}
+                    onChange={e => setDraftFilters({ ...draftFilters, endDate: e.target.value })}
+                  />
+                </div>
+                <div className="session-filter-field">
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Status Sesi</label>
+                  <select
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={draftFilters.status}
+                    onChange={e => setDraftFilters({ ...draftFilters, status: e.target.value })}
+                  >
+                    <option value="">Semua</option>
+                    <option value="scheduled">Jadwal</option>
+                    <option value="completed">Selesai</option>
+                    <option value="cancelled">Batal</option>
+                  </select>
+                </div>
+                <div className="session-filter-field">
+                  <label className="uppercase tracking-widest text-xs font-bold mb-2">Pembayaran</label>
+                  <select
+                    className="bg-cloud-grey focus:bg-white transition-colors"
+                    value={draftFilters.paymentStatus}
+                    onChange={e => setDraftFilters({ ...draftFilters, paymentStatus: e.target.value })}
+                  >
+                    <option value="">Semua</option>
+                    <option value="pending">Pending</option>
+                    <option value="paid">Lunas</option>
+                    <option value="overdue">Overdue</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="session-filter-actions">
+                <button type="button" className="btn btn-outline" onClick={handleReset}>
+                  Reset
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={searching}>
+                  {searching ? 'Mencari...' : 'Update Data'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </form>
 
       <div className="card-elevated bg-white border-ash-grey shadow-sm overflow-hidden">
@@ -556,9 +659,12 @@ const SessionAll: React.FC = () => {
         <div className="session-divider" />
 
         <div className="session-results-body">
-          {sessions.map(session => (
-            <div key={session.id} className="rounded-2xl border border-ash-grey bg-paper-white p-4 md:p-5 shadow-sm">
-              <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          {paginatedSessions.map(session => {
+            const isEditingNote = editingNoteId === session.id;
+
+            return (
+            <div key={session.id} className="session-list-card">
+              <div className="session-list-card-grid">
                 <div className="space-y-4 flex-1 min-w-0">
                   <div className="space-y-1">
                     <h3 className="text-xl font-bold text-body">{session.student_name || '-'}</h3>
@@ -593,16 +699,91 @@ const SessionAll: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="border-t border-ash-grey pt-4">
-                    <p className="text-xs uppercase tracking-widest font-bold text-muted mb-2">Catatan Sesi</p>
-                    <p className="text-sm text-muted leading-relaxed max-w-3xl">
-                      {session.notes && session.notes.trim() !== '' ? session.notes : 'Belum ada catatan.'}
-                    </p>
+                  <div className="session-note-panel">
+                    <div className="session-note-head">
+                      <p className="text-xs uppercase tracking-widest font-bold text-muted">Catatan Sesi</p>
+                      {!isEditingNote && (
+                        <button type="button" className="session-note-edit" onClick={() => startEditingNote(session)}>
+                          {session.notes && session.notes.trim() !== '' ? 'Edit Catatan' : 'Tambah Catatan'}
+                        </button>
+                      )}
+                    </div>
+
+                    {isEditingNote ? (
+                      <div className="session-note-editor">
+                        <textarea
+                          className="session-note-textarea"
+                          value={editNoteValue}
+                          onChange={(event) => setEditNoteValue(event.target.value)}
+                          placeholder="Tulis ringkasan materi, progres, atau catatan pembayaran..."
+                        />
+                        <div className="session-note-actions">
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            onClick={cancelEditingNote}
+                            disabled={updatingSessionId === session.id}
+                          >
+                            Batal
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            onClick={() => commitSessionNote(session)}
+                            disabled={updatingSessionId === session.id}
+                          >
+                            {updatingSessionId === session.id ? 'Menyimpan...' : 'Simpan Catatan'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="session-note-text">
+                        {session.notes && session.notes.trim() !== '' ? session.notes : 'Belum ada catatan.'}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="w-full xl:w-auto xl:min-w-[240px] border-t xl:border-t-0 xl:border-l border-ash-grey pt-4 xl:pt-0 xl:pl-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
+                <div className="session-update-card">
+                  <div className="session-segment-stack">
+                    <div>
+                      <label className="session-segment-label">STATUS SESI</label>
+                      <div className="session-segmented-control" role="group" aria-label="Status sesi">
+                        {sessionStatusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`session-segment-button is-${option.tone} ${session.status === option.value ? 'is-active' : ''}`}
+                            onClick={() => commitSessionPatch(session, { status: option.value })}
+                            disabled={updatingSessionId === session.id || session.status === option.value}
+                            aria-pressed={session.status === option.value}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="session-segment-label">STATUS PEMBAYARAN</label>
+                      <div className="session-segmented-control" role="group" aria-label="Status pembayaran">
+                        {paymentStatusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`session-segment-button is-${option.tone} ${session.payment_status === option.value ? 'is-active' : ''}`}
+                            onClick={() => commitSessionPatch(session, { payment_status: option.value })}
+                            disabled={updatingSessionId === session.id || session.payment_status === option.value}
+                            aria-pressed={session.payment_status === option.value}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="session-row-actions">
                     <button
                       type="button"
                       className="btn btn-outline btn-sm w-full"
@@ -639,7 +820,8 @@ const SessionAll: React.FC = () => {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           {sessions.length === 0 && (
             <div className="text-center py-12 md:py-16 bg-cloud-grey/30 rounded-2xl border border-dashed border-ash-grey">
@@ -648,6 +830,30 @@ const SessionAll: React.FC = () => {
             </div>
           )}
         </div>
+
+        {sessions.length > 0 && (
+          <div className="session-pagination">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+            >
+              Sebelumnya
+            </button>
+            <span>
+              Halaman {currentPage} dari {totalPages}
+            </span>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Berikutnya
+            </button>
+          </div>
+        )}
       </div>
 
       {(showModal || isClosingModal) && (
@@ -759,7 +965,7 @@ const SessionAll: React.FC = () => {
                     value={currentSession.status}
                     onChange={(e) => setCurrentSession({ ...currentSession, status: e.target.value as Session['status'] })}
                   >
-                    <option value="scheduled">Schedule</option>
+                    <option value="scheduled">Jadwal</option>
                     <option value="completed">Selesai</option>
                     <option value="cancelled">Batal</option>
                   </select>
