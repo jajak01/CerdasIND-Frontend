@@ -56,7 +56,7 @@ const paymentStatusLabel: Record<Session['payment_status'], string> = {
   overdue: 'Overdue',
 };
 
-const sessionsPerPage = 6;
+const rowsPerPageOptions = [10, 30, 50, 100];
 
 const sessionStatusOptions: Array<{ value: Session['status']; label: string; tone: string }> = [
   { value: 'scheduled', label: 'Jadwal', tone: 'scheduled' },
@@ -127,6 +127,7 @@ const SessionAll: React.FC = () => {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [sessionsPerPage, setSessionsPerPage] = useState(50);
   const [updatingSessionId, setUpdatingSessionId] = useState<number | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [editNoteValue, setEditNoteValue] = useState('');
@@ -204,7 +205,7 @@ const SessionAll: React.FC = () => {
   const paginatedSessions = useMemo(() => {
     const startIndex = (currentPage - 1) * sessionsPerPage;
     return sessions.slice(startIndex, startIndex + sessionsPerPage);
-  }, [currentPage, sessions]);
+  }, [currentPage, sessions, sessionsPerPage]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -650,6 +651,24 @@ const SessionAll: React.FC = () => {
             </p>
           </div>
           <div className="session-results-meta text-sm text-muted">
+            <div className="flex items-center gap-2 mr-2">
+              <select
+                className="bg-cloud-grey focus:bg-white transition-colors text-xs font-bold py-1 px-2 rounded-lg border-ash-grey uppercase tracking-wider"
+                value={sessionsPerPage}
+                onChange={(e) => {
+                  setSessionsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{ width: 'auto' }}
+              >
+                {rowsPerPageOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <span className="hidden sm:inline text-[10px] uppercase tracking-widest font-bold">Rows</span>
+            </div>
             <span>{sessions.length} data</span>
             <span className="hidden sm:inline-block h-1 w-1 rounded-full bg-steel-grey" />
             <span>{activeFilterCount} filter aktif</span>

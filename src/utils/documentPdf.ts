@@ -427,7 +427,7 @@ export const buildInvoicePdfBlob = (payload: {
       { label: 'Status', value: 'Lunas' },
     ],
     summaryTitle: 'Ringkasan pembayaran',
-    summary: 'Invoice ini adalah catatan resmi pembayaran sesi yang dipilih dan dapat dikirim melalui WhatsApp.',
+    summary: 'Invoice ini adalah catatan resmi pembayaran',
     totalLabel: 'Total Tagihan',
     totalValue: formatMoney(total),
     footerNote: 'CerdasIND invoice document',
