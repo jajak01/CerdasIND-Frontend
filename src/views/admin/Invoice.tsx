@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FileDown, MessageCircle, ReceiptText, RotateCcw, SquareCheckBig } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminService, type Session, type Student, type StudentDocument, type DocumentSession } from '../../services/admin.service';
-import { buildInvoicePdfBlob as generateInvoicePdfBlob, downloadBlob, type PdfSession } from '../../utils/documentPdf';
+import { buildInvoicePdfBlob as generateInvoicePdfBlob, buildBillingPdfBlob as generateBillingPdfBlob, downloadBlob, type PdfSession } from '../../utils/documentPdf';
 
 type PaidSession = Session;
+type InvoiceMode = 'billing' | 'payment';
 
 const currencyFormatter = new Intl.NumberFormat('id-ID', {
   style: 'currency',
@@ -58,16 +59,18 @@ const normalizeWhatsappNumber = (value: string) => {
   return trimmed;
 };
 
-const buildMessage = (student: Student, selectedSessions: PaidSession[], documentNumber?: string) => {
+const buildMessage = (student: Student, selectedSessions: PaidSession[], mode: InvoiceMode, documentNumber?: string) => {
   const firstDate = selectedSessions[0]?.date ? formatDate(selectedSessions[0].date) : '-';
   const lastDate = selectedSessions[selectedSessions.length - 1]?.date
     ? formatDate(selectedSessions[selectedSessions.length - 1].date)
     : '-';
   const total = selectedSessions.reduce((sum, session) => sum + (session.price || 0), 0);
 
+  const typeName = mode === 'billing' ? 'penagihan' : 'pembayaran';
+
   return [
     documentNumber ? `Nomor invoice: ${documentNumber}.` : '',
-    `Ini adalah invoice pembayaran dari tanggal ${firstDate} sampai ${lastDate}.`,
+    `Ini adalah invoice ${typeName} dari tanggal ${firstDate} sampai ${lastDate}.`,
     `Nama siswa: ${student.name}.`,
     `Total tagihan: ${formatMoney(total)}.`,
     'Mohon cek file invoice terlampir.',
@@ -89,7 +92,23 @@ const buildInvoicePdfBlob = (
     periodEnd,
   });
 
+const buildBillingPdfBlob = (
+  student: Student,
+  selectedSessions: Array<DocumentSession | PdfSession>,
+  documentNumber: string,
+  periodStart: string,
+  periodEnd: string,
+) =>
+  generateBillingPdfBlob({
+    documentNumber,
+    student,
+    sessions: selectedSessions,
+    periodStart,
+    periodEnd,
+  });
+
 const Invoice: React.FC = () => {
+  const [mode, setMode] = useState<InvoiceMode>('billing');
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<number | ''>('');
   const [sessions, setSessions] = useState<PaidSession[]>([]);
@@ -99,8 +118,8 @@ const Invoice: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const pdfUrlRef = useRef('');
-  const [savedInvoices, setSavedInvoices] = useState<StudentDocument[]>([]);
-  const [lastCreatedInvoice, setLastCreatedInvoice] = useState<StudentDocument | null>(null);
+  const [savedDocuments, setSavedDocuments] = useState<StudentDocument[]>([]);
+  const [lastCreatedDoc, setLastCreatedDoc] = useState<StudentDocument | null>(null);
 
   const selectedStudent = useMemo(
     () => students.find((student) => student.id === selectedStudentId) || null,
@@ -150,17 +169,17 @@ const Invoice: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const loadInvoices = async () => {
+    const loadDocuments = async () => {
       try {
-        const data = await adminService.getInvoices();
-        setSavedInvoices(data);
+        const data = mode === 'billing' ? await adminService.getBillings() : await adminService.getInvoices();
+        setSavedDocuments(data);
       } catch (error) {
-        console.error('Failed to fetch invoices', error);
+        console.error(`Failed to fetch ${mode}s`, error);
       }
     };
 
-    void loadInvoices();
-  }, []);
+    void loadDocuments();
+  }, [mode]);
 
   useEffect(() => {
     const loadSessions = async () => {
@@ -174,10 +193,10 @@ const Invoice: React.FC = () => {
       try {
         const data = await adminService.getSessions({
           studentId: selectedStudentId,
-          paymentStatus: 'paid',
+          paymentStatus: mode === 'payment' ? 'paid' : 'pending',
         });
-        const paidSessions = data
-          .filter((session) => session.payment_status === 'paid')
+        const filteredSessions = data
+          .filter((session) => mode === 'payment' ? session.payment_status === 'paid' : session.payment_status === 'pending')
           .sort((left, right) => {
             const leftDate = parseDateOnly(left.date)?.getTime() || 0;
             const rightDate = parseDateOnly(right.date)?.getTime() || 0;
@@ -185,10 +204,10 @@ const Invoice: React.FC = () => {
             return (left.time || '').localeCompare(right.time || '');
           });
 
-        setSessions(paidSessions);
-        setSelectedSessionIds(paidSessions.map((session) => session.id));
+        setSessions(filteredSessions);
+        setSelectedSessionIds(filteredSessions.map((session) => session.id));
       } catch (error) {
-        console.error('Failed to fetch paid sessions for invoice', error);
+        console.error(`Failed to fetch ${mode} sessions for invoice`, error);
         setSessions([]);
         setSelectedSessionIds([]);
       } finally {
@@ -197,7 +216,7 @@ const Invoice: React.FC = () => {
     };
 
     void loadSessions();
-  }, [selectedStudentId]);
+  }, [selectedStudentId, mode]);
 
   useEffect(() => {
     return () => {
@@ -216,13 +235,13 @@ const Invoice: React.FC = () => {
     setPdfUrl('');
   };
 
-  const clearSavedInvoice = () => {
-    setLastCreatedInvoice(null);
+  const clearSavedDoc = () => {
+    setLastCreatedDoc(null);
   };
 
   const handleToggleSession = (sessionId: number) => {
     clearGeneratedPdf();
-    clearSavedInvoice();
+    clearSavedDoc();
     setSelectedSessionIds((current) =>
       current.includes(sessionId) ? current.filter((id) => id !== sessionId) : [...current, sessionId],
     );
@@ -230,13 +249,13 @@ const Invoice: React.FC = () => {
 
   const handleSelectAll = () => {
     clearGeneratedPdf();
-    clearSavedInvoice();
+    clearSavedDoc();
     setSelectedSessionIds(sessions.map((session) => session.id));
   };
 
   const handleClearSelection = () => {
     clearGeneratedPdf();
-    clearSavedInvoice();
+    clearSavedDoc();
     setSelectedSessionIds([]);
   };
 
@@ -247,7 +266,8 @@ const Invoice: React.FC = () => {
     }
 
     if (selectedSessions.length === 0) {
-      toast.error('Pilih minimal satu sesi yang sudah lunas.');
+      const statusText = mode === 'payment' ? 'lunas' : 'belum lunas';
+      toast.error(`Pilih minimal satu sesi yang ${statusText}.`);
       return;
     }
 
@@ -255,15 +275,19 @@ const Invoice: React.FC = () => {
       const payload = {
         student_id: selectedStudent.id,
         session_ids: selectedSessions.map((session) => session.id),
-        message: buildMessage(selectedStudent, selectedSessions),
+        message: buildMessage(selectedStudent, selectedSessions, mode),
       };
-      const created = await adminService.createInvoice(payload);
-      setLastCreatedInvoice(created);
+      const created = mode === 'billing' 
+        ? await adminService.createBilling(payload) 
+        : await adminService.createInvoice(payload);
+      
+      setLastCreatedDoc(created);
       setPdfUrl('');
-      setSavedInvoices((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      setSavedDocuments((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      toast.success(`${mode === 'billing' ? 'Billing' : 'Invoice'} berhasil disimpan.`);
     } catch (error) {
-      console.error('Failed to save invoice data', error);
-      toast.error('Gagal menyimpan data invoice.');
+      console.error(`Failed to save ${mode} data`, error);
+      toast.error(`Gagal menyimpan data ${mode}.`);
     }
   };
 
@@ -273,26 +297,34 @@ const Invoice: React.FC = () => {
       return;
     }
 
-    if (!lastCreatedInvoice) {
-      toast.error('Simpan data invoice terlebih dahulu.');
+    if (!lastCreatedDoc) {
+      toast.error('Simpan data terlebih dahulu.');
       return;
     }
 
-    const selectedSnapshots = lastCreatedInvoice.sessions || [];
+    const selectedSnapshots = lastCreatedDoc.sessions || [];
     if (selectedSnapshots.length === 0) {
-      toast.error('Data invoice belum memiliki sesi yang tersimpan.');
+      toast.error('Data belum memiliki sesi yang tersimpan.');
       return;
     }
 
     setGenerating(true);
     try {
-      const blob = buildInvoicePdfBlob(
-        selectedStudent,
-        selectedSnapshots,
-        lastCreatedInvoice.document_number,
-        lastCreatedInvoice.period_start,
-        lastCreatedInvoice.period_end,
-      );
+      const blob = mode === 'billing'
+        ? buildBillingPdfBlob(
+            selectedStudent,
+            selectedSnapshots,
+            lastCreatedDoc.document_number,
+            lastCreatedDoc.period_start,
+            lastCreatedDoc.period_end,
+          )
+        : buildInvoicePdfBlob(
+            selectedStudent,
+            selectedSnapshots,
+            lastCreatedDoc.document_number,
+            lastCreatedDoc.period_start,
+            lastCreatedDoc.period_end,
+          );
       const nextUrl = URL.createObjectURL(blob);
 
       if (pdfUrlRef.current) {
@@ -303,10 +335,11 @@ const Invoice: React.FC = () => {
       setPdfUrl(nextUrl);
       window.open(nextUrl, '_blank', 'noopener,noreferrer');
 
-      downloadBlob(blob, `invoice-${lastCreatedInvoice.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
+      const prefix = mode === 'billing' ? 'billing' : 'invoice';
+      downloadBlob(blob, `${prefix}-${lastCreatedDoc.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
-      console.error('Failed to generate invoice PDF', error);
-      toast.error('Gagal membuat PDF invoice.');
+      console.error(`Failed to generate ${mode} PDF`, error);
+      toast.error(`Gagal membuat PDF ${mode}.`);
     } finally {
       setGenerating(false);
     }
@@ -319,12 +352,12 @@ const Invoice: React.FC = () => {
     }
 
     if (selectedSessions.length === 0) {
-      toast.error('Pilih minimal satu sesi yang sudah lunas.');
+      toast.error('Pilih minimal satu sesi.');
       return;
     }
 
-    if (!lastCreatedInvoice) {
-      toast.error('Simpan invoice terlebih dahulu agar nomor invoice tercatat.');
+    if (!lastCreatedDoc) {
+      toast.error('Simpan data terlebih dahulu agar nomor dokumen tercatat.');
       return;
     }
 
@@ -334,45 +367,59 @@ const Invoice: React.FC = () => {
       return;
     }
 
-    const message = buildMessage(selectedStudent, selectedSessions, lastCreatedInvoice.document_number);
+    const message = buildMessage(selectedStudent, selectedSessions, mode, lastCreatedDoc.document_number);
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handleDownloadPastInvoice = async (documentId: number) => {
+  const handleDownloadPastDoc = async (documentId: number) => {
     try {
-      const record = await adminService.getInvoiceDetail(documentId);
+      const record = mode === 'billing' 
+        ? await adminService.getBillingDetail(documentId)
+        : await adminService.getInvoiceDetail(documentId);
+      
       if (!record) {
-        toast.error('Invoice tidak ditemukan.');
+        toast.error('Dokumen tidak ditemukan.');
         return;
       }
 
       const recordStudent = await adminService.getStudentDetail(record.student_id);
       if (!recordStudent) {
-        toast.error('Data siswa untuk invoice ini tidak ditemukan.');
+        toast.error('Data siswa untuk dokumen ini tidak ditemukan.');
         return;
       }
 
-      const blob = buildInvoicePdfBlob(
-        recordStudent,
-        record.sessions || [],
-        record.document_number,
-        record.period_start,
-        record.period_end,
-      );
-      downloadBlob(blob, `invoice-${record.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
+      const blob = mode === 'billing'
+        ? buildBillingPdfBlob(
+            recordStudent,
+            record.sessions || [],
+            record.document_number,
+            record.period_start,
+            record.period_end,
+          )
+        : buildInvoicePdfBlob(
+            recordStudent,
+            record.sessions || [],
+            record.document_number,
+            record.period_start,
+            record.period_end,
+          );
+      
+      const prefix = mode === 'billing' ? 'billing' : 'invoice';
+      downloadBlob(blob, `${prefix}-${record.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
-      console.error('Failed to download past invoice', error);
-      toast.error('Gagal mengunduh invoice lama.');
+      console.error(`Failed to download past ${mode}`, error);
+      toast.error(`Gagal mengunduh ${mode} lama.`);
     }
   };
 
-  const invoiceNumber = useMemo(() => {
+  const docNumberPreview = useMemo(() => {
     if (!selectedStudent) return '-';
     const now = new Date();
     const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    return `INV-${datePart}-${String(selectedStudent.id).padStart(4, '0')}`;
-  }, [selectedStudent]);
+    const prefix = mode === 'billing' ? 'BIL' : 'INV';
+    return `${prefix}-${datePart}-${String(selectedStudent.id).padStart(4, '0')}`;
+  }, [selectedStudent, mode]);
 
   if (loadingStudents) {
     return <div className="container py-8">Loading...</div>;
@@ -383,9 +430,11 @@ const Invoice: React.FC = () => {
       <div className="invoice-hero">
         <div>
           <p className="invoice-kicker">Admin Panel</p>
-          <h1 className="text-display">Invoice Pembayaran</h1>
+          <h1 className="text-display">{mode === 'billing' ? 'Invoice Penagihan' : 'Invoice Pembayaran'}</h1>
           <p className="invoice-subtitle">
-            Pilih siswa, centang sesi yang sudah lunas, lalu buat PDF sementara dan kirim pesan WhatsApp dengan isi invoice.
+            {mode === 'billing' 
+              ? 'Pilih siswa, centang sesi yang belum lunas, lalu buat PDF penagihan untuk wali murid.' 
+              : 'Pilih siswa, centang sesi yang sudah lunas, lalu buat PDF bukti pembayaran.'}
           </p>
         </div>
         <div className="invoice-hero-actions">
@@ -394,7 +443,7 @@ const Invoice: React.FC = () => {
             <span className="invoice-stat-value">{selectedStudent ? selectedStudent.name : '-'}</span>
           </div>
           <div className="invoice-stat">
-            <span className="invoice-stat-label">Sesi lunas</span>
+            <span className="invoice-stat-label">{mode === 'billing' ? 'Sesi pending' : 'Sesi lunas'}</span>
             <span className="invoice-stat-value">{selectedSessions.length}</span>
           </div>
           <div className="invoice-stat">
@@ -404,16 +453,31 @@ const Invoice: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex gap-4 mb-8">
+        <button 
+          className={`btn ${mode === 'billing' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => { setMode('billing'); clearGeneratedPdf(); clearSavedDoc(); setSelectedStudentId(''); }}
+        >
+          Mode Penagihan
+        </button>
+        <button 
+          className={`btn ${mode === 'payment' ? 'btn-primary' : 'btn-outline'}`}
+          onClick={() => { setMode('payment'); clearGeneratedPdf(); clearSavedDoc(); setSelectedStudentId(''); }}
+        >
+          Mode Pembayaran
+        </button>
+      </div>
+
       <div className="invoice-layout">
         <section className="invoice-panel card-elevated bg-white border-ash-grey shadow-sm">
           <div className="invoice-panel-head">
             <div>
               <p className="invoice-kicker">Pilih Data</p>
-              <h2 className="text-heading-sm">Siswa dan sesi yang akan dimasukkan ke invoice</h2>
+              <h2 className="text-heading-sm">Siswa dan sesi yang akan dimasukkan ke {mode === 'billing' ? 'billing' : 'invoice'}</h2>
             </div>
             <div className="invoice-panel-meta">
               <span>{students.length} siswa</span>
-              <span>{sessions.length} sesi lunas</span>
+              <span>{sessions.length} sesi {mode === 'billing' ? 'pending' : 'lunas'}</span>
             </div>
           </div>
 
@@ -425,7 +489,7 @@ const Invoice: React.FC = () => {
                 value={selectedStudentId}
                 onChange={(event) => {
                   clearGeneratedPdf();
-                  clearSavedInvoice();
+                  clearSavedDoc();
                   setSelectedStudentId(event.target.value ? Number(event.target.value) : '');
                 }}
               >
@@ -443,9 +507,9 @@ const Invoice: React.FC = () => {
 
           <div className="invoice-list-header">
             <div>
-              <h3 className="text-heading-sm">Checklist sesi lunas</h3>
+              <h3 className="text-heading-sm">Checklist sesi {mode === 'billing' ? 'pending' : 'lunas'}</h3>
               <p className="session-results-caption">
-                Hanya sesi dengan status pembayaran <strong>Lunas</strong> yang muncul di sini.
+                Hanya sesi dengan status pembayaran <strong>{mode === 'billing' ? 'Pending' : 'Lunas'}</strong> yang muncul di sini.
               </p>
             </div>
             <div className="invoice-list-actions">
@@ -459,10 +523,10 @@ const Invoice: React.FC = () => {
           </div>
 
           {loadingSessions ? (
-            <div className="invoice-empty-state">Memuat sesi lunas...</div>
+            <div className="invoice-empty-state">Memuat sesi...</div>
           ) : sessions.length === 0 ? (
             <div className="invoice-empty-state">
-              Pilih siswa untuk melihat daftar sesi yang sudah lunas.
+              Pilih siswa untuk melihat daftar sesi yang {mode === 'billing' ? 'belum lunas' : 'sudah lunas'}.
             </div>
           ) : (
             <div className="invoice-session-list">
@@ -494,13 +558,13 @@ const Invoice: React.FC = () => {
         <aside className="invoice-side card-elevated bg-white border-ash-grey shadow-sm">
           <div>
             <p className="invoice-kicker">Ringkasan</p>
-            <h2 className="text-heading-sm">Preview invoice</h2>
+            <h2 className="text-heading-sm">Preview {mode === 'billing' ? 'billing' : 'invoice'}</h2>
           </div>
 
           <div className="invoice-summary">
             <div className="invoice-summary-item">
-              <span>Nomor Invoice</span>
-              <strong>{lastCreatedInvoice?.document_number || invoiceNumber}</strong>
+              <span>Nomor Dokumen</span>
+              <strong>{lastCreatedDoc?.document_number || docNumberPreview}</strong>
             </div>
             <div className="invoice-summary-item">
               <span>Nama Siswa</span>
@@ -525,11 +589,11 @@ const Invoice: React.FC = () => {
               <FileDown size={16} />
               Simpan Data
             </button>
-            <button type="button" className="btn btn-primary w-full" onClick={handleCreatePdf} disabled={generating || !lastCreatedInvoice}>
+            <button type="button" className="btn btn-primary w-full" onClick={handleCreatePdf} disabled={generating || !lastCreatedDoc}>
               <FileDown size={16} />
               {generating ? 'Membuat PDF...' : 'Buat PDF'}
             </button>
-            <button type="button" className="btn btn-success w-full" onClick={handleOpenWhatsapp} disabled={!lastCreatedInvoice}>
+            <button type="button" className="btn btn-success w-full" onClick={handleOpenWhatsapp} disabled={!lastCreatedDoc}>
               <MessageCircle size={16} />
               Buka WhatsApp
             </button>
@@ -538,7 +602,7 @@ const Invoice: React.FC = () => {
               className="btn btn-outline w-full"
               onClick={() => {
                 clearGeneratedPdf();
-                clearSavedInvoice();
+                clearSavedDoc();
                 setSelectedStudentId('');
               }}
             >
@@ -559,7 +623,7 @@ const Invoice: React.FC = () => {
             <div>
               <strong>Template pesan WhatsApp</strong>
               <p>
-                <span>Ini adalah invoice pembayaran dari tanggal sekian sampai sekian.</span>
+                <span>Ini adalah invoice {mode === 'billing' ? 'penagihan' : 'pembayaran'} dari tanggal sekian sampai sekian.</span>
               </p>
             </div>
           </div>
@@ -576,18 +640,18 @@ const Invoice: React.FC = () => {
         <div className="invoice-panel-head">
           <div>
             <p className="invoice-kicker">Rekaman</p>
-            <h2 className="text-heading-sm">Invoice yang sudah disimpan</h2>
+            <h2 className="text-heading-sm">{mode === 'billing' ? 'Billing' : 'Invoice'} yang sudah disimpan</h2>
           </div>
           <div className="invoice-panel-meta">
-            <span>{savedInvoices.length} record</span>
+            <span>{savedDocuments.length} record</span>
           </div>
         </div>
 
         <div className="invoice-record-list">
-          {savedInvoices.length === 0 ? (
-            <div className="invoice-empty-state">Belum ada invoice yang tersimpan.</div>
+          {savedDocuments.length === 0 ? (
+            <div className="invoice-empty-state">Belum ada {mode === 'billing' ? 'billing' : 'invoice'} yang tersimpan.</div>
           ) : (
-            savedInvoices.map((record) => (
+            savedDocuments.map((record) => (
               <div key={record.id} className="invoice-record-item">
                 <div>
                   <strong>{record.document_number}</strong>
@@ -598,7 +662,7 @@ const Invoice: React.FC = () => {
                 <div className="invoice-record-meta">
                   <span>{record.session_count} sesi</span>
                   <span>{formatMoney(record.total_amount)}</span>
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => handleDownloadPastInvoice(record.id)}>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => handleDownloadPastDoc(record.id)}>
                     Unduh PDF
                   </button>
                 </div>

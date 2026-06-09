@@ -97,8 +97,15 @@ const Report: React.FC = () => {
     const loadRecords = async () => {
       setLoading(true);
       try {
-        const [invoiceData, reportData] = await Promise.all([adminService.getInvoices(), adminService.getReports()]);
-        setInvoices(invoiceData);
+        const [invoiceData, billingData, reportData] = await Promise.all([
+          adminService.getInvoices(), 
+          adminService.getBillings(),
+          adminService.getReports()
+        ]);
+        
+        // Combine invoices and billings for selection
+        const combined = [...invoiceData, ...billingData].sort((a, b) => b.id - a.id);
+        setInvoices(combined);
         setReports(reportData);
         setSavedReports(reportData);
       } catch (error) {
@@ -121,7 +128,16 @@ const Report: React.FC = () => {
 
       setLoadingInvoice(true);
       try {
-        const invoice = await adminService.getInvoiceDetail(selectedInvoiceId);
+        // Try finding in the current list first to determine if it's billing or invoice
+        const found = invoices.find(inv => inv.id === selectedInvoiceId);
+        let invoice: StudentDocument | null = null;
+        
+        if (found?.document_kind === 'billing') {
+          invoice = await adminService.getBillingDetail(selectedInvoiceId);
+        } else {
+          invoice = await adminService.getInvoiceDetail(selectedInvoiceId);
+        }
+
         setSelectedInvoice(invoice);
         if (invoice) {
           const studentDetail = await adminService.getStudentDetail(invoice.student_id);
@@ -130,7 +146,7 @@ const Report: React.FC = () => {
           setStudent(null);
         }
       } catch (error) {
-        console.error('Failed to fetch invoice detail for report', error);
+        console.error('Failed to fetch invoice/billing detail for report', error);
         setSelectedInvoice(null);
         setStudent(null);
       } finally {
@@ -139,7 +155,7 @@ const Report: React.FC = () => {
     };
 
     void loadSelectedInvoice();
-  }, [selectedInvoiceId]);
+  }, [selectedInvoiceId, invoices]);
 
   useEffect(() => {
     return () => {
@@ -164,7 +180,7 @@ const Report: React.FC = () => {
 
   const handleSaveData = async () => {
     if (!selectedInvoice || !student) {
-      toast.error('Pilih invoice terlebih dahulu.');
+      toast.error('Pilih invoice penagihan/pembayaran terlebih dahulu.');
       return;
     }
 
@@ -185,6 +201,7 @@ const Report: React.FC = () => {
       setLastCreatedReport(created);
       setPdfUrl('');
       setSavedReports((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+      toast.success('Report berhasil disimpan.');
     } catch (error) {
       console.error('Failed to save report data', error);
       toast.error('Gagal menyimpan report.');
@@ -193,7 +210,7 @@ const Report: React.FC = () => {
 
   const handleCreatePdf = async () => {
     if (!selectedInvoice || !student) {
-      toast.error('Pilih invoice terlebih dahulu.');
+      toast.error('Pilih invoice penagihan/pembayaran terlebih dahulu.');
       return;
     }
     if (!lastCreatedReport) {
@@ -229,9 +246,9 @@ const Report: React.FC = () => {
     }
   };
 
-  const handleOpenWhatsapp = () => {
+  const handleOpenWhatsApp = () => {
     if (!selectedInvoice || !student) {
-      toast.error('Pilih invoice terlebih dahulu.');
+      toast.error('Pilih invoice penagihan/pembayaran terlebih dahulu.');
       return;
     }
     if (!lastCreatedReport) {
@@ -257,7 +274,16 @@ const Report: React.FC = () => {
         return;
       }
 
-      const linkedInvoice = record.linked_invoice_id ? await adminService.getInvoiceDetail(record.linked_invoice_id) : null;
+      // Need to find if the linked invoice is billing or payment
+      let linkedDoc: StudentDocument | null = null;
+      if (record.linked_invoice_id) {
+        // Try payment first, then billing
+        linkedDoc = await adminService.getInvoiceDetail(record.linked_invoice_id);
+        if (!linkedDoc) {
+          linkedDoc = await adminService.getBillingDetail(record.linked_invoice_id);
+        }
+      }
+
       const recordStudent = await adminService.getStudentDetail(record.student_id);
       if (!recordStudent) {
         toast.error('Data siswa untuk report ini tidak ditemukan.');
@@ -268,7 +294,7 @@ const Report: React.FC = () => {
         recordStudent,
         record,
         record.summary || '',
-        linkedInvoice?.document_number || record.linked_invoice_number || '-',
+        linkedDoc?.document_number || record.linked_invoice_number || '-',
       );
       downloadBlob(blob, `report-${record.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
@@ -279,7 +305,8 @@ const Report: React.FC = () => {
 
   const invoiceLabel = useMemo(() => {
     if (!selectedInvoice) return '-';
-    return `${selectedInvoice.document_number} - ${selectedInvoice.student_name || '-'}`;
+    const typeName = selectedInvoice.document_kind === 'billing' ? '(Penagihan)' : '(Pembayaran)';
+    return `${selectedInvoice.document_number} ${typeName} - ${selectedInvoice.student_name || '-'}`;
   }, [selectedInvoice]);
 
   if (loading) {
@@ -293,7 +320,7 @@ const Report: React.FC = () => {
           <p className="invoice-kicker">Admin Panel</p>
           <h1 className="text-display">Student Report</h1>
           <p className="invoice-subtitle">
-            Pilih invoice yang sudah lunas, tulis resume perkembangan, lalu simpan report yang terhubung ke accounting record.
+            Pilih invoice penagihan atau pembayaran, tulis resume perkembangan, lalu simpan report yang terhubung ke accounting record.
           </p>
         </div>
         <div className="invoice-hero-actions">
@@ -312,17 +339,17 @@ const Report: React.FC = () => {
         <section className="invoice-panel card-elevated bg-white border-ash-grey shadow-sm">
           <div className="invoice-panel-head">
             <div>
-              <p className="invoice-kicker">Pilih Invoice</p>
-              <h2 className="text-heading-sm">Report dibuat dari invoice yang sudah disimpan</h2>
+              <p className="invoice-kicker">Pilih Dokumen Sumber</p>
+              <h2 className="text-heading-sm">Report dibuat dari invoice penagihan atau pembayaran</h2>
             </div>
             <div className="invoice-panel-meta">
-              <span>{invoices.length} invoice</span>
+              <span>{invoices.length} dokumen tersedia</span>
             </div>
           </div>
 
           <div className="invoice-form-grid">
             <div>
-              <label className="uppercase tracking-widest text-xs font-bold mb-2">Invoice</label>
+              <label className="uppercase tracking-widest text-xs font-bold mb-2">Invoice Sumber</label>
               <select
                 className="bg-cloud-grey focus:bg-white transition-colors"
                 value={selectedInvoiceId}
@@ -332,16 +359,16 @@ const Report: React.FC = () => {
                   setSelectedInvoiceId(event.target.value ? Number(event.target.value) : '');
                 }}
               >
-                <option value="">Pilih invoice lunas</option>
+                <option value="">Pilih invoice penagihan/pembayaran</option>
                 {invoices.map((invoice) => (
                   <option key={invoice.id} value={invoice.id}>
-                    {invoice.document_number} - {invoice.student_name}
+                    {invoice.document_number} ({invoice.document_kind === 'billing' ? 'Penagihan' : 'Pembayaran'}) - {invoice.student_name}
                   </option>
                 ))}
               </select>
             </div>
 
-            {loadingInvoice && <div className="invoice-empty-state">Memuat detail invoice...</div>}
+            {loadingInvoice && <div className="invoice-empty-state">Memuat detail dokumen...</div>}
 
             {selectedInvoice && student && (
               <div className="invoice-summary">
@@ -386,7 +413,7 @@ const Report: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="invoice-empty-state">Pilih invoice untuk melihat catatan sesi.</div>
+            <div className="invoice-empty-state">Pilih dokumen sumber untuk melihat catatan sesi.</div>
           )}
         </section>
 
@@ -415,7 +442,7 @@ const Report: React.FC = () => {
               <FileDown size={16} />
               {generating ? 'Membuat PDF...' : 'Buat PDF'}
             </button>
-            <button type="button" className="btn btn-success w-full" onClick={handleOpenWhatsapp} disabled={!lastCreatedReport}>
+            <button type="button" className="btn btn-success w-full" onClick={handleOpenWhatsApp} disabled={!lastCreatedReport}>
               <MessageCircle size={16} />
               Buka WhatsApp
             </button>
@@ -428,7 +455,7 @@ const Report: React.FC = () => {
           <div className="invoice-note">
             <NotebookPen size={16} />
             <p>
-              Report dibuat dari invoice yang sudah tersimpan agar catatan perkembangan tetap terhubung dengan pembayaran.
+              Report dibuat dari invoice penagihan/pembayaran yang sudah tersimpan agar catatan perkembangan tetap terhubung dengan data keuangan.
             </p>
           </div>
 

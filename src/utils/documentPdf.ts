@@ -1,6 +1,6 @@
 import type { Student, DocumentSession } from '../services/admin.service';
 
-type PdfKind = 'invoice' | 'report';
+type PdfKind = 'billing' | 'invoice' | 'report';
 
 export type PdfSession = {
   date: string;
@@ -271,7 +271,7 @@ const buildDocumentPdf = (options: PdfOptions) => {
     const isLastPage = pageIndex === sessionPages.length - 1;
     const page: string[] = [];
 
-    const subtitle = `${options.kind === 'invoice' ? 'Invoice pembiayaan' : 'Report perkembangan'} - dicetak ${today}`;
+    const subtitle = `${options.kind === 'report' ? 'Report perkembangan' : 'Invoice pembiayaan'} - dicetak ${today}`;
     page.push(pdfHeader(options.title, options.documentNumber, subtitle));
 
     if (isFirstPage) {
@@ -285,10 +285,10 @@ const buildDocumentPdf = (options: PdfOptions) => {
     }
 
     const tableTop = isFirstPage ? pageHeight - 330 : pageHeight - 136;
-    page.push(`BT /F1-B 12 Tf 0.08 0.13 0.15 rg 1 0 0 1 ${margin} ${tableTop + 18} Tm (${ascii(options.kind === 'invoice' ? 'Daftar sesi lunas' : 'Catatan per sesi')}) Tj ET`);
+    page.push(`BT /F1-B 12 Tf 0.08 0.13 0.15 rg 1 0 0 1 ${margin} ${tableTop + 18} Tm (${ascii(options.kind === 'report' ? 'Catatan per sesi' : 'Daftar sesi')}) Tj ET`);
 
     const tableRows = pageSessions.map((session) => {
-      if (options.kind === 'invoice') {
+      if (options.kind !== 'report') {
         return [
           formatShortDate(session.date),
           formatTime(session.time),
@@ -306,7 +306,7 @@ const buildDocumentPdf = (options: PdfOptions) => {
     });
 
     const tableColumns =
-      options.kind === 'invoice'
+      options.kind !== 'report'
         ? [
             { label: 'Tanggal', width: 72 },
             { label: 'Waktu', width: 58 },
@@ -325,14 +325,14 @@ const buildDocumentPdf = (options: PdfOptions) => {
 
     if (isLastPage) {
       const summaryTop = table.bottomY - 18;
-      if (options.kind === 'invoice') {
+      if (options.kind !== 'report') {
         page.push(
           pdfSummary(
             margin,
             summaryTop,
             contentWidth,
             options.summaryTitle || 'Ringkasan invoice',
-            options.summary || 'Invoice ini tercatat sebagai pembayaran resmi untuk sesi yang dipilih.',
+            options.summary || 'Invoice ini tercatat sebagai catatan pembiayaan untuk sesi yang dipilih.',
             [
               `${options.totalLabel || 'Total'}: ${options.totalValue || '-'}`,
               `Periode: ${formatDate(options.periodStart)} sampai ${formatDate(options.periodEnd)}`,
@@ -396,6 +396,44 @@ const buildDocumentPdf = (options: PdfOptions) => {
   return new Blob([pdf], { type: 'application/pdf' });
 };
 
+export const buildBillingPdfBlob = (payload: {
+  documentNumber: string;
+  student: Student;
+  sessions: Array<DocumentSession | PdfSession>;
+  periodStart: string;
+  periodEnd: string;
+}) => {
+  const sessions = payload.sessions.map((session) => ({
+    date: 'session_date' in session ? session.session_date : session.date,
+    time: 'session_time' in session ? session.session_time : session.time,
+    subject: session.subject,
+    note: 'note' in session ? session.note : (session as any).notes,
+    price: session.price,
+  }));
+
+  const total = sessions.reduce((sum, session) => sum + (session.price || 0), 0);
+  return buildDocumentPdf({
+    kind: 'billing',
+    title: 'Invoice Penagihan',
+    documentNumber: payload.documentNumber,
+    student: payload.student,
+    periodStart: payload.periodStart,
+    periodEnd: payload.periodEnd,
+    sessions,
+    summaryItems: [
+      { label: 'Nama Siswa', value: payload.student.name },
+      { label: 'Kontak', value: payload.student.contact || '-' },
+      { label: 'Sekolah / Kelas', value: `${payload.student.school || '-'} / ${payload.student.grade || '-'}` },
+      { label: 'Status Pembayaran', value: 'Belum Lunas' },
+    ],
+    summaryTitle: 'Ringkasan tagihan',
+    summary: 'Invoice ini adalah pemberitahuan tagihan resmi untuk sesi yang dipilih.',
+    totalLabel: 'Total Tagihan',
+    totalValue: formatMoney(total),
+    footerNote: 'CerdasIND billing document',
+  });
+};
+
 export const buildInvoicePdfBlob = (payload: {
   documentNumber: string;
   student: Student;
@@ -424,7 +462,7 @@ export const buildInvoicePdfBlob = (payload: {
       { label: 'Nama Siswa', value: payload.student.name },
       { label: 'Kontak', value: payload.student.contact || '-' },
       { label: 'Sekolah / Kelas', value: `${payload.student.school || '-'} / ${payload.student.grade || '-'}` },
-      { label: 'Status', value: 'Lunas' },
+      { label: 'Status Pembayaran', value: 'Lunas' },
     ],
     summaryTitle: 'Ringkasan pembayaran',
     summary: 'Invoice ini adalah catatan resmi pembayaran sesi yang dipilih dan dapat dikirim melalui WhatsApp.',

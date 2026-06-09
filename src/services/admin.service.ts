@@ -75,7 +75,7 @@ export interface DocumentSession {
 export interface StudentDocument {
   id: number;
   public_id?: string;
-  document_kind: 'invoice' | 'report';
+  document_kind: 'billing' | 'invoice' | 'report';
   document_number: string;
   student_id: number;
   student_name?: string;
@@ -96,7 +96,7 @@ export interface StudentDocument {
 export interface CreateDocumentRequest {
   student_id: number;
   session_ids: number[];
-  linked_invoice_id?: number;
+  linked_invoice_id?: number | null;
   summary?: string;
   message?: string;
 }
@@ -262,6 +262,33 @@ export const adminService = {
   },
 
   // Documents
+  getBillings: async (filters?: { studentId?: number }): Promise<StudentDocument[]> => {
+    try {
+      const response = await api.get<any>('/admin/billings', { params: filters });
+      const data = response.data?.data || response.data;
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      console.error('Error fetching billings:', err.response?.data || err.message);
+      return [];
+    }
+  },
+
+  getBillingDetail: async (id: number): Promise<StudentDocument | null> => {
+    try {
+      const response = await api.get<any>(`/admin/billings/${id}`);
+      const data = response.data?.data || response.data;
+      return data;
+    } catch (err: any) {
+      console.error('Error fetching billing detail:', err.response?.data || err.message);
+      return null;
+    }
+  },
+
+  createBilling: async (payload: CreateDocumentRequest): Promise<StudentDocument> => {
+    const response = await api.post('/admin/billings', payload);
+    return response.data?.data || response.data;
+  },
+
   getInvoices: async (filters?: { studentId?: number; linkedInvoiceId?: number }): Promise<StudentDocument[]> => {
     try {
       const response = await api.get<any>('/admin/invoices', { params: filters });
