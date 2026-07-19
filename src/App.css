@@ -1320,3 +1320,26 @@ label {
     padding: var(--spacing-20);
   }
 }
+
+/* Soal & Option Images (CBT / Review) */
+.soal-image-wrapper {
+  margin-top: var(--spacing-16);
+}
+
+.soal-image {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-ash-grey);
+}
+
+.option-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin-top: var(--spacing-8);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-ash-grey);
+}

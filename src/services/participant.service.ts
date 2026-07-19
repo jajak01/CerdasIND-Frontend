@@ -22,7 +22,8 @@ export interface Soal {
   id: number;
   tipe_soal: 'pilihan_ganda' | 'isian_singkat';
   teks_soal: string;
-  pilihan_jawaban?: Array<{ opsi: string; teks: string }>;
+  image_url?: string;
+  pilihan_jawaban?: Array<{ opsi: string; teks: string; image_url?: string }>;
   bobot_nilai: number;
 }
 
@@ -38,7 +39,8 @@ export interface ReviewItem {
   id: number;
   tipe_soal: 'pilihan_ganda' | 'isian_singkat';
   teks_soal: string;
-  pilihan_jawaban?: Array<{ opsi: string; teks: string }>;
+  image_url?: string;
+  pilihan_jawaban?: Array<{ opsi: string; teks: string; image_url?: string }>;
   pembahasan: string;
   jawaban_peserta: string;
   kunci_jawaban: string;

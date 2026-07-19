@@ -61,9 +61,102 @@ Welcome to the CerdasIND frontend development guide. This document provides all 
 
 ---
 
+## 3. Participant API (Exam Workflow)
 
+### **Get Educational Levels (Jenjang)**
+- **Endpoint**: `GET /jenjang`
+- **Response**: Array of `{ "id": 1, "nama": "SD" }`
 
-## 3. Admin API
+### **Get Subjects (Mapel)**
+- **Endpoint**: `GET /jenjang/:id/mapel`
+- **Example**: `GET /jenjang/1/mapel`
+- **Response**: Array of `{ "id": 1, "jenjang_id": 1, "nama": "Matematika" }`
+
+### **Get Exam Bundles**
+- **Endpoint**: `GET /mapel/:id/bundles`
+- **Response**: Array of Bundles
+  ```json
+  {
+    "id": 1,
+    "nama_bundle": "Tryout UN 2024",
+    "deskripsi": "Latihan soal UN",
+    "waktu_menit": 120,
+    "is_active": true
+  }
+  ```
+
+### **Start Exam (Get Questions)**
+- **Endpoint**: `GET /bundles/:id/soal`
+- **Response**: Array of Questions (Public version, no answers, no discussion)
+  ```json
+  {
+    "id": 1,
+    "tipe_soal": "pilihan_ganda",
+    "teks_soal": "1 + 1 = ...",
+    "image_url": "https://drive.google.com/uc?export=view&id=...",
+    "bobot_nilai": 5,
+    "opsi": [
+      {"id": 1, "soal_id": 1, "opsi": "A", "teks": "1", "image_url": ""},
+      {"id": 2, "soal_id": 1, "opsi": "B", "teks": "2", "image_url": "https://..."},
+      {"id": 3, "soal_id": 1, "opsi": "C", "teks": "3", "image_url": ""}
+    ]
+  }
+  ```
+- `image_url` on soal = question image. `image_url` on each opsi = image for that option.
+- Google Drive sharing links are auto-converted to `uc?export=view&id=ID` format.
+
+### **Submit Exam**
+- **Endpoint**: `POST /bundles/:id/submit`
+- **Payload**:
+  ```json
+  {
+    "jawaban": [
+      { "soal_id": 1, "jawaban_peserta": "B" },
+      { "soal_id": 2, "jawaban_peserta": "Ibukota Indonesia adalah Jakarta" }
+    ]
+  }
+  ```
+
+### **Exam History**
+- **Endpoint**: `GET /users/history`
+- **Response**:
+  ```json
+  [
+    {
+      "history_id": 1,
+      "nama_bundle": "Tryout UN 2024",
+      "waktu_mulai": "2024-05-30T...",
+      "skor_akhir": 85.5,
+      "status": "selesai" // "berlangsung", "menunggu_koreksi", "selesai"
+    }
+  ]
+  ```
+
+### **Exam Review (Post-Exam)**
+- **Endpoint**: `GET /bundles/:id/review`
+- **Response**: Details with answers, discussion, and image URLs.
+  ```json
+  [
+    {
+      "id": 1,
+      "tipe_soal": "pilihan_ganda",
+      "teks_soal": "...",
+      "image_url": "https://drive.google.com/uc?export=view&id=...",
+      "opsi": [
+        {"id": 1, "soal_id": 1, "opsi": "A", "teks": "...", "image_url": ""},
+        {"id": 2, "soal_id": 1, "opsi": "B", "teks": "...", "image_url": "https://..."}
+      ],
+      "pembahasan": "Penjelasan soal...",
+      "jawaban_peserta": "A",
+      "kunci_jawaban": "B",
+      "is_benar": false
+    }
+  ]
+  ```
+
+---
+
+## 4. Admin API
 
 ### **Dashboard Stats**
 - **Endpoint**: `GET /admin/dashboard/stats`
@@ -121,7 +214,7 @@ Welcome to the CerdasIND frontend development guide. This document provides all 
 
 ---
 
-## 4. Data Enums
+## 5. Data Enums
 
 - **UserRole**: `admin`, `peserta`
 - **JenisSoal**: `pilihan_ganda`, `isian_singkat`

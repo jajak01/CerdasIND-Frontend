@@ -108,6 +108,17 @@ const CBTWorkspace: React.FC = () => {
               <KaTeXParser text={currentSoal.teks_soal} />
             </div>
 
+            {currentSoal.image_url && (
+              <div className="soal-image-wrapper">
+                <img
+                  src={currentSoal.image_url}
+                  alt="Gambar soal"
+                  className="soal-image"
+                  loading="lazy"
+                />
+              </div>
+            )}
+
             <div className="jawaban-area">
               {currentSoal.tipe_soal === 'pilihan_ganda' ? (
                 <div className="options-grid">
@@ -126,6 +137,14 @@ const CBTWorkspace: React.FC = () => {
                       <span className="option-label">{opt.opsi}.</span>
                       <div className="option-text">
                         <KaTeXParser text={opt.teks} />
+                        {opt.image_url && (
+                          <img
+                            src={opt.image_url}
+                            alt={`Gambar opsi ${opt.opsi}`}
+                            className="option-image"
+                            loading="lazy"
+                          />
+                        )}
                       </div>
                     </label>
                   ))}

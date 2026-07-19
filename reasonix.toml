@@ -1,0 +1,2 @@
+[permissions]
+allow = ["Bash(cd C:\\Users\\desen\\cerdasind\\CerdasIND-Frontend && npx tsc --noEmit 2>&1)", "Bash(cd /c/Users/desen/cerdasind/CerdasIND-Frontend && npm run build 2>&1)"]

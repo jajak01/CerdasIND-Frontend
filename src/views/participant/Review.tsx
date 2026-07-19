@@ -68,6 +68,17 @@ const Review: React.FC = () => {
                 <KaTeXParser text={s.teks_soal} />
               </div>
 
+              {s.image_url && (
+                <div className="soal-image-wrapper">
+                  <img
+                    src={s.image_url}
+                    alt="Gambar soal"
+                    className="soal-image"
+                    loading="lazy"
+                  />
+                </div>
+              )}
+
               <div className="review-answers grid-2">
                 <div className="answer-box user-answer">
                   <p className="label">Jawaban Anda:</p>

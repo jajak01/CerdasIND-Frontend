@@ -75,9 +75,18 @@ const AdminDashboard: React.FC = () => {
             <h2 className="text-heading-sm">Paket Soal (CBT)</h2>
             <label className="btn btn-primary cursor-pointer shadow-sm">
               Upload Paket
-              <input type="file" className="hidden" onChange={handleFileUpload} />
+              <input type="file" className="hidden" onChange={handleFileUpload} accept=".xlsx,.xls" />
             </label>
           </div>
+          <p className="text-sm text-muted mb-4 leading-relaxed">
+            Upload file Excel (.xlsx) untuk membuat paket soal. Format kolom: <strong>teks_soal</strong>,{' '}
+            <strong>tipe_soal</strong>, <strong>opsi_a</strong>–<strong>opsi_d</strong>,{' '}
+            <strong>kunci_jawaban</strong>, <strong>bobot_nilai</strong>, <strong>pembahasan</strong>, dan{' '}
+            <strong>5 kolom Google Drive link gambar</strong>:{' '}
+            <code>image_url</code>, <code>opsi_a_image_url</code>, <code>opsi_b_image_url</code>,{' '}
+            <code>opsi_c_image_url</code>, <code>opsi_d_image_url</code>.
+            Kolom gambar bersifat opsional — kosongkan jika soal tidak memiliki gambar.
+          </p>
           <div className="space-y-4">
             {bundles.length === 0 ? (
               <p className="text-muted text-center py-8 bg-white/50 rounded-lg">Belum ada paket soal.</p>
