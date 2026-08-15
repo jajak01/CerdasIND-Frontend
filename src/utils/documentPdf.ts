@@ -65,7 +65,6 @@ const tableHeaderHeight = 22;
 const tableRowPadding = 8;
 const tableLineHeight = 12;
 const tableBottomLimit = 72;
-const summaryReserveHeight = 164;
 
 const ascii = (value: string) =>
   Array.from((value || '').normalize('NFD'))
@@ -184,6 +183,11 @@ const pdfParagraph = (x: number, y: number, width: number, text: string, fontSiz
   return lines.map((line, index) => `BT /F1 ${fontSize} Tf 0.12 0.16 0.18 rg 1 0 0 1 ${x} ${y - index * leading} Tm (${ascii(line)}) Tj ET`).join('\n');
 };
 
+const getParagraphLineCount = (width: number, text: string, fontSize = 10) => {
+  const maxChars = Math.max(20, Math.floor(width / (fontSize * 0.55)));
+  return wrapText(text, maxChars).length;
+};
+
 const pdfTable = (
   x: number,
   yTop: number,
@@ -254,6 +258,7 @@ const paginateTableRows = (
   columns: Array<{ width: number }>,
   firstTableTop: number,
   nextTableTop: number,
+  summaryReserve: number,
 ) => {
   if (rows.length === 0) return [[]];
 
@@ -264,7 +269,7 @@ const paginateTableRows = (
   rows.forEach((row, rowIndex) => {
     const rowHeight = getTableRowHeight(columns, row);
     const hasMoreRows = rowIndex < rows.length - 1;
-    const reserveBottom = hasMoreRows ? tableBottomLimit : tableBottomLimit + summaryReserveHeight;
+    const reserveBottom = hasMoreRows ? tableBottomLimit : tableBottomLimit + summaryReserve;
 
     if (currentPage.length > 0 && currentY - rowHeight < reserveBottom) {
       pages.push(currentPage);
@@ -284,7 +289,11 @@ const paginateTableRows = (
 };
 
 const pdfSummary = (x: number, y: number, width: number, title: string, summary: string, extraLines: string[] = []) => {
-  const height = 110 + extraLines.length * 16;
+  const paragraphLeading = 14;
+  const extraLeading = 14;
+  const summaryLineCount = getParagraphLineCount(width - 24, summary, 10);
+  const extraTopOffset = 38 + summaryLineCount * paragraphLeading + 14;
+  const height = Math.max(110, extraTopOffset + extraLines.length * extraLeading + 18);
   const lines: string[] = [];
   lines.push('q');
   lines.push('0.973 0.978 0.982 rg');
@@ -294,11 +303,19 @@ const pdfSummary = (x: number, y: number, width: number, title: string, summary:
   lines.push(`${x} ${y - height} ${width} ${height} re S`);
   lines.push('Q');
   lines.push(`BT /F1-B 11 Tf 0.08 0.13 0.15 rg 1 0 0 1 ${x + 12} ${y - 20} Tm (${ascii(title)}) Tj ET`);
-  lines.push(pdfParagraph(x + 12, y - 38, width - 24, summary, 10, 14));
+  lines.push(pdfParagraph(x + 12, y - 38, width - 24, summary, 10, paragraphLeading));
   extraLines.forEach((line, index) => {
-    lines.push(`BT /F1 9 Tf 0.24 0.27 0.3 rg 1 0 0 1 ${x + 12} ${y - 70 - index * 14} Tm (${ascii(line)}) Tj ET`);
+    lines.push(`BT /F1 9 Tf 0.24 0.27 0.3 rg 1 0 0 1 ${x + 12} ${y - extraTopOffset - index * extraLeading} Tm (${ascii(line)}) Tj ET`);
   });
   return { content: lines.join('\n'), bottomY: y - height };
+};
+
+const getSummaryHeight = (width: number, summary: string, extraLines: string[] = []) => {
+  const paragraphLeading = 14;
+  const extraLeading = 14;
+  const summaryLineCount = getParagraphLineCount(width - 24, summary, 10);
+  const extraTopOffset = 38 + summaryLineCount * paragraphLeading + 14;
+  return Math.max(110, extraTopOffset + extraLines.length * extraLeading + 18);
 };
 
 const pdfFooter = (text: string) =>
@@ -339,7 +356,18 @@ const buildDocumentPdf = (options: PdfOptions) => {
           { label: 'Sesi', width: 220 },
           { label: 'Catatan', width: 160 },
         ];
-  const tablePages = paginateTableRows(tableRows, tableColumns, firstTableTop, nextTableTop);
+  const summaryExtraLines =
+    options.kind === 'invoice'
+      ? [
+          `${options.totalLabel || 'Total'}: ${options.totalValue || '-'}`,
+          `Periode: ${formatDate(options.periodStart)} sampai ${formatDate(options.periodEnd)}`,
+        ]
+      : [
+          `Periode: ${formatDate(options.periodStart)} sampai ${formatDate(options.periodEnd)}`,
+          `Invoice terkait: ${options.invoiceNumber || '-'}`,
+        ];
+  const summaryReserve = getSummaryHeight(contentWidth, options.summary || '', summaryExtraLines) + 24;
+  const tablePages = paginateTableRows(tableRows, tableColumns, firstTableTop, nextTableTop, summaryReserve);
   const pages: string[] = [];
 
   tablePages.forEach((pageRows, pageIndex) => {
@@ -376,10 +404,7 @@ const buildDocumentPdf = (options: PdfOptions) => {
             contentWidth,
             options.summaryTitle || 'Ringkasan invoice',
             options.summary || 'Invoice ini tercatat sebagai pembayaran resmi untuk sesi yang dipilih.',
-            [
-              `${options.totalLabel || 'Total'}: ${options.totalValue || '-'}`,
-              `Periode: ${formatDate(options.periodStart)} sampai ${formatDate(options.periodEnd)}`,
-            ],
+            summaryExtraLines,
           ).content,
         );
       } else {
@@ -390,10 +415,7 @@ const buildDocumentPdf = (options: PdfOptions) => {
             contentWidth,
             options.summaryTitle || 'Resume report',
             options.summary || 'Report ini terhubung dengan invoice yang telah disimpan.',
-            [
-              `Periode: ${formatDate(options.periodStart)} sampai ${formatDate(options.periodEnd)}`,
-              `Invoice terkait: ${options.invoiceNumber || '-'}`,
-            ],
+            summaryExtraLines,
           ).content,
         );
       }
