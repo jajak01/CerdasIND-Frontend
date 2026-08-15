@@ -313,10 +313,7 @@ const Report: React.FC = () => {
     return `${selectedInvoice.document_number} - ${selectedInvoice.student_name || '-'}`;
   }, [selectedInvoice]);
 
-  const enrichedInvoiceSessions = useMemo(
-    () => enrichDocumentSessions(selectedInvoice?.sessions, sessionNotes),
-    [selectedInvoice, sessionNotes],
-  );
+  const enrichedInvoiceSessions = enrichDocumentSessions(selectedInvoice?.sessions, sessionNotes);
 
   if (loading) {
     return <div className="container py-8">Loading...</div>;

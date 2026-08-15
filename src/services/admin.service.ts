@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import api from './api';
 import type { Bundle } from './participant.service';
 
@@ -28,6 +29,7 @@ export interface DashboardStats {
   pending_payments: number;
   this_month_revenue: number;
   total_omzet: number;
+  pending_revenue: number;
 }
 
 export interface Student {
@@ -102,6 +104,26 @@ export interface CreateDocumentRequest {
 
 export type { Bundle };
 
+const toNumber = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const normalizeDashboardStats = (value: Record<string, unknown>): DashboardStats => {
+  const completedRevenue = toNumber(value.this_month_revenue ?? value.pendapatan_selesai ?? value.completed_revenue);
+  const pendingRevenue = toNumber(value.pending_revenue ?? value.pendapatan_pending);
+
+  return {
+    total_students: toNumber(value.total_students),
+    today_sessions: toNumber(value.today_sessions),
+    this_week_sessions: toNumber(value.this_week_sessions),
+    pending_payments: toNumber(value.pending_payments ?? value.pending_payment_count ?? value.sesi_pending),
+    this_month_revenue: completedRevenue,
+    total_omzet: toNumber(value.total_omzet ?? value.omzet_total ?? completedRevenue + pendingRevenue),
+    pending_revenue: pendingRevenue,
+  };
+};
+
 export const adminService = {
   // Dashboard
   getStats: async (): Promise<DashboardStats | null> => {
@@ -109,7 +131,7 @@ export const adminService = {
       const response = await api.get<any>('/admin/dashboard/stats');
       const data = response.data?.data || response.data;
       console.log('Dashboard Stats Response:', response.data);
-      return data;
+      return normalizeDashboardStats(data || {});
     } catch (err: any) {
       console.error('Error fetching dashboard stats:', err.response?.data || err.message);
       return null;

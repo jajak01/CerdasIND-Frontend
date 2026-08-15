@@ -1,8 +1,27 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../store/authStore';
 import { authService } from '../../services/auth.service';
 import { LogIn } from 'lucide-react';
+
+type LocationState = {
+  from?: {
+    pathname?: string;
+  };
+};
+
+const getLoginErrorMessage = (err: unknown) => {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const response = (err as { response?: { data?: { error?: string } } }).response;
+    return response?.data?.error;
+  }
+
+  if (err instanceof Error) {
+    return err.message;
+  }
+
+  return null;
+};
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -12,6 +31,7 @@ const Login: React.FC = () => {
   
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +45,15 @@ const Login: React.FC = () => {
         username: response.data.username,
         role: response.data.role,
       });
-      
+
+      const fromPath = (location.state as LocationState | null)?.from?.pathname;
       if (response.data.role === 'admin') {
-        navigate('/admin/dashboard');
+        navigate(fromPath && fromPath.startsWith('/admin') ? fromPath : '/admin/dashboard', { replace: true });
       } else {
-        navigate('/');
+        navigate(fromPath && !fromPath.startsWith('/admin') ? fromPath : '/', { replace: true });
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Login gagal. Periksa email dan password Anda.');
+    } catch (err: unknown) {
+      setError(getLoginErrorMessage(err) || 'Login gagal. Periksa email dan password Anda.');
     } finally {
       setLoading(false);
     }

@@ -24,14 +24,14 @@ const KaTeXParser: React.FC<KaTeXParserProps> = ({ text }) => {
           const formula = part.slice(2, -2);
           try {
             katex.render(formula, span, { displayMode: true, throwOnError: false });
-          } catch (e) {
+          } catch {
             span.textContent = part;
           }
         } else if (part.startsWith('$') && part.endsWith('$')) {
           const formula = part.slice(1, -1);
           try {
             katex.render(formula, span, { displayMode: false, throwOnError: false });
-          } catch (e) {
+          } catch {
             span.textContent = part;
           }
         } else {

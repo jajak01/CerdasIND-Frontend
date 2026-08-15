@@ -17,6 +17,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  if (!requiredRole && user?.role === 'admin' && location.pathname === '/') {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
   if (requiredRole && user?.role !== requiredRole) {
     // If user is admin but tries to access participant area, it's usually fine based on backend logic
     // but if user is participant and tries to access admin area, redirect to home.

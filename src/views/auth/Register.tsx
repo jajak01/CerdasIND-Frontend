@@ -3,6 +3,19 @@ import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../../services/auth.service';
 import { UserPlus } from 'lucide-react';
 
+const getRegisterErrorMessage = (err: unknown) => {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const response = (err as { response?: { data?: { error?: string } } }).response;
+    return response?.data?.error;
+  }
+
+  if (err instanceof Error) {
+    return err.message;
+  }
+
+  return null;
+};
+
 const Register: React.FC = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -27,8 +40,8 @@ const Register: React.FC = () => {
     try {
       await authService.register(username, email, password);
       navigate('/login', { state: { message: 'Registrasi berhasil! Silakan masuk.' } });
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Registrasi gagal. Email mungkin sudah terdaftar.');
+    } catch (err: unknown) {
+      setError(getRegisterErrorMessage(err) || 'Registrasi gagal. Email mungkin sudah terdaftar.');
     } finally {
       setLoading(false);
     }

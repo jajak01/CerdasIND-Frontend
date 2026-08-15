@@ -61,6 +61,11 @@ const pageWidth = 595;
 const pageHeight = 842;
 const margin = 34;
 const contentWidth = pageWidth - margin * 2;
+const tableHeaderHeight = 22;
+const tableRowPadding = 8;
+const tableLineHeight = 12;
+const tableBottomLimit = 72;
+const summaryReserveHeight = 164;
 
 const ascii = (value: string) =>
   Array.from((value || '').normalize('NFD'))
@@ -113,14 +118,6 @@ const wrapText = (value: string, maxChars: number) => {
   }
 
   return lines;
-};
-
-const chunk = <T,>(items: T[], size: number) => {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
 };
 
 const formatDate = (value: string) => {
@@ -193,18 +190,15 @@ const pdfTable = (
   columns: Array<{ label: string; width: number }>,
   rows: Array<Array<string>>,
 ) => {
-  const headerHeight = 22;
-  const rowPadding = 8;
-  const lineHeight = 12;
   const body: string[] = [];
   const totalWidth = columns.reduce((sum, column) => sum + column.width, 0);
 
   body.push('q');
   body.push('0.925 0.941 0.949 rg');
-  body.push(`${x} ${yTop - headerHeight} ${totalWidth} ${headerHeight} re f`);
+  body.push(`${x} ${yTop - tableHeaderHeight} ${totalWidth} ${tableHeaderHeight} re f`);
   body.push('0.769 0.82 0.839 RG');
   body.push('0.8 w');
-  body.push(`${x} ${yTop - headerHeight} ${totalWidth} ${headerHeight} re S`);
+  body.push(`${x} ${yTop - tableHeaderHeight} ${totalWidth} ${tableHeaderHeight} re S`);
   body.push('Q');
 
   let cursorX = x;
@@ -213,13 +207,13 @@ const pdfTable = (
     cursorX += column.width;
   });
 
-  let cursorY = yTop - headerHeight;
+  let cursorY = yTop - tableHeaderHeight;
   rows.forEach((row, rowIndex) => {
     const wrappedColumns = row.map((value, index) => {
       const availableChars = Math.max(12, Math.floor((columns[index].width - 16) / 5.4));
       return wrapText(value, availableChars);
     });
-    const rowHeight = Math.max(...wrappedColumns.map((lines) => lines.length), 1) * lineHeight + rowPadding * 2;
+    const rowHeight = Math.max(...wrappedColumns.map((lines) => lines.length), 1) * tableLineHeight + tableRowPadding * 2;
     body.push('q');
     if (rowIndex % 2 === 0) {
       body.push('0.985 0.988 0.99 rg');
@@ -234,8 +228,8 @@ const pdfTable = (
     columns.forEach((column, columnIndex) => {
       const cellLines = wrappedColumns[columnIndex];
       const startY = cursorY - 14;
-      cellLines.slice(0, 4).forEach((line, lineIndex) => {
-        body.push(`BT /F1 ${columnIndex === columns.length - 1 ? 9 : 10} Tf 0.1 0.13 0.15 rg 1 0 0 1 ${cellX + 8} ${startY - lineIndex * lineHeight} Tm (${ascii(line)}) Tj ET`);
+      cellLines.forEach((line, lineIndex) => {
+        body.push(`BT /F1 ${columnIndex === columns.length - 1 ? 9 : 10} Tf 0.1 0.13 0.15 rg 1 0 0 1 ${cellX + 8} ${startY - lineIndex * tableLineHeight} Tm (${ascii(line)}) Tj ET`);
       });
       cellX += column.width;
     });
@@ -244,6 +238,49 @@ const pdfTable = (
   });
 
   return { content: body.join('\n'), bottomY: cursorY };
+};
+
+const getTableRowHeight = (columns: Array<{ width: number }>, row: Array<string>) => {
+  const maxLines = row.reduce((max, value, index) => {
+    const availableChars = Math.max(12, Math.floor((columns[index].width - 16) / 5.4));
+    return Math.max(max, wrapText(value, availableChars).length);
+  }, 1);
+
+  return maxLines * tableLineHeight + tableRowPadding * 2;
+};
+
+const paginateTableRows = (
+  rows: Array<Array<string>>,
+  columns: Array<{ width: number }>,
+  firstTableTop: number,
+  nextTableTop: number,
+) => {
+  if (rows.length === 0) return [[]];
+
+  const pages: Array<Array<Array<string>>> = [];
+  let currentPage: Array<Array<string>> = [];
+  let currentY = firstTableTop - tableHeaderHeight;
+
+  rows.forEach((row, rowIndex) => {
+    const rowHeight = getTableRowHeight(columns, row);
+    const hasMoreRows = rowIndex < rows.length - 1;
+    const reserveBottom = hasMoreRows ? tableBottomLimit : tableBottomLimit + summaryReserveHeight;
+
+    if (currentPage.length > 0 && currentY - rowHeight < reserveBottom) {
+      pages.push(currentPage);
+      currentPage = [];
+      currentY = nextTableTop - tableHeaderHeight;
+    }
+
+    currentPage.push(row);
+    currentY -= rowHeight;
+  });
+
+  if (currentPage.length > 0) {
+    pages.push(currentPage);
+  }
+
+  return pages;
 };
 
 const pdfSummary = (x: number, y: number, width: number, title: string, summary: string, extraLines: string[] = []) => {
@@ -268,14 +305,46 @@ const pdfFooter = (text: string) =>
   `BT /F1 8 Tf 0.42 0.46 0.5 rg 1 0 0 1 ${margin} ${28} Tm (${ascii(text)}) Tj ET`;
 
 const buildDocumentPdf = (options: PdfOptions) => {
-  const sessionsPerPage = 8;
-  const pages: string[] = [];
-  const sessionPages = chunk(options.sessions, sessionsPerPage);
   const today = dateFormatter.format(new Date());
+  const firstTableTop = pageHeight - 330;
+  const nextTableTop = pageHeight - 136;
+  const tableRows = options.sessions.map((session) => {
+    if (options.kind === 'invoice') {
+      return [
+        formatShortDate(session.date),
+        formatTime(session.time),
+        session.subject,
+        formatMoney(session.price || 0),
+      ];
+    }
 
-  sessionPages.forEach((pageSessions, pageIndex) => {
+    return [
+      formatShortDate(session.date),
+      formatTime(session.time),
+      session.subject,
+      session.note || '-',
+    ];
+  });
+  const tableColumns =
+    options.kind === 'invoice'
+      ? [
+          { label: 'Tanggal', width: 72 },
+          { label: 'Waktu', width: 58 },
+          { label: 'Sesi', width: 260 },
+          { label: 'Nominal', width: 120 },
+        ]
+      : [
+          { label: 'Tanggal', width: 72 },
+          { label: 'Waktu', width: 58 },
+          { label: 'Sesi', width: 220 },
+          { label: 'Catatan', width: 160 },
+        ];
+  const tablePages = paginateTableRows(tableRows, tableColumns, firstTableTop, nextTableTop);
+  const pages: string[] = [];
+
+  tablePages.forEach((pageRows, pageIndex) => {
     const isFirstPage = pageIndex === 0;
-    const isLastPage = pageIndex === sessionPages.length - 1;
+    const isLastPage = pageIndex === tablePages.length - 1;
     const page: string[] = [];
 
     const subtitle = `${options.kind === 'invoice' ? 'Invoice pembiayaan' : 'Report perkembangan'} - dicetak ${today}`;
@@ -291,43 +360,10 @@ const buildDocumentPdf = (options: PdfOptions) => {
       page.push(pdfBox(margin + boxWidth + boxGap, boxTop - 182, boxWidth, 84, options.summaryItems[3]?.label || 'Status', options.summaryItems[3]?.value || '-'));
     }
 
-    const tableTop = isFirstPage ? pageHeight - 330 : pageHeight - 136;
+    const tableTop = isFirstPage ? firstTableTop : nextTableTop;
     page.push(`BT /F1-B 12 Tf 0.08 0.13 0.15 rg 1 0 0 1 ${margin} ${tableTop + 18} Tm (${ascii(options.kind === 'invoice' ? 'Daftar sesi lunas' : 'Catatan per sesi')}) Tj ET`);
 
-    const tableRows = pageSessions.map((session) => {
-      if (options.kind === 'invoice') {
-        return [
-          formatShortDate(session.date),
-          formatTime(session.time),
-          session.subject,
-          formatMoney(session.price || 0),
-        ];
-      }
-
-      return [
-        formatShortDate(session.date),
-        formatTime(session.time),
-        session.subject,
-        session.note || '-',
-      ];
-    });
-
-    const tableColumns =
-      options.kind === 'invoice'
-        ? [
-            { label: 'Tanggal', width: 72 },
-            { label: 'Waktu', width: 58 },
-            { label: 'Sesi', width: 260 },
-            { label: 'Nominal', width: 120 },
-          ]
-        : [
-            { label: 'Tanggal', width: 72 },
-            { label: 'Waktu', width: 58 },
-            { label: 'Sesi', width: 220 },
-            { label: 'Catatan', width: 160 },
-          ];
-
-    const table = pdfTable(margin, tableTop, tableColumns, tableRows);
+    const table = pdfTable(margin, tableTop, tableColumns, pageRows);
     page.push(table.content);
 
     if (isLastPage) {

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminService, type Bundle, type DashboardStats } from '../../services/admin.service';
 
+const formatRupiah = (value: number) => `Rp ${value.toLocaleString('id-ID')}`;
+
 const AdminDashboard: React.FC = () => {
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -36,7 +38,7 @@ const AdminDashboard: React.FC = () => {
         alert('Upload sukses');
         const updatedBundles = await adminService.getBundles();
         setBundles(updatedBundles);
-      } catch (err) {
+      } catch {
         alert('Upload gagal');
       }
     }
@@ -62,7 +64,7 @@ const AdminDashboard: React.FC = () => {
           <div className="card-elevated text-center bg-white shadow-sm border-lemon-zest">
             <p className="text-muted text-xs uppercase tracking-widest font-bold">Revenue Bulan Ini</p>
             <p className="text-display text-4xl text-success">
-              Rp {stats.this_month_revenue.toLocaleString()}
+              {formatRupiah(stats.this_month_revenue)}
             </p>
           </div>
         </div>

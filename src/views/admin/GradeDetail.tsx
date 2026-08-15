@@ -25,7 +25,7 @@ const GradeDetail: React.FC = () => {
       }));
       await adminService.gradeSubmission(parseInt(id), penilaian);
       navigate('/admin/koreksi');
-    } catch (err) {
+    } catch {
       alert('Gagal menyimpan nilai');
     } finally {
       setSaving(false);

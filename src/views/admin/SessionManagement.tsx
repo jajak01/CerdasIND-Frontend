@@ -177,7 +177,7 @@ const SessionManagement: React.FC = () => {
         setEditingNoteId(null);
         setEditNoteValue('');
       }
-    } catch (err) {
+    } catch {
       alert('Gagal mengupdate sesi');
     } finally {
       setUpdatingSessionId(null);
