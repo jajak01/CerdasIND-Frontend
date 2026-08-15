@@ -11,6 +11,12 @@ export type PdfSession = {
   price?: number;
 };
 
+// The backend returns session notes as `note` on document sessions and as
+// `notes` on the raw session list. Normalize both so the UI and PDF never
+// drop the "catatan" when the field name differs.
+export const getSessionNote = (session: { note?: string; notes?: string }): string =>
+  (session.note || session.notes || '').trim();
+
 type PdfSummaryItem = {
   label: string;
   value: string;
@@ -29,6 +35,7 @@ type PdfOptions = {
   summary?: string;
   totalLabel?: string;
   totalValue?: string;
+  invoiceNumber?: string;
   footerNote: string;
 };
 
@@ -349,7 +356,7 @@ const buildDocumentPdf = (options: PdfOptions) => {
             options.summary || 'Report ini terhubung dengan invoice yang telah disimpan.',
             [
               `Periode: ${formatDate(options.periodStart)} sampai ${formatDate(options.periodEnd)}`,
-              `Invoice terkait: ${options.documentNumber}`,
+              `Invoice terkait: ${options.invoiceNumber || '-'}`,
             ],
           ).content,
         );
@@ -407,7 +414,7 @@ export const buildInvoicePdfBlob = (payload: {
     date: 'session_date' in session ? session.session_date : session.date,
     time: 'session_time' in session ? session.session_time : session.time,
     subject: session.subject,
-    note: 'note' in session ? session.note : (session as any).notes,
+    note: getSessionNote(session),
     price: session.price,
   }));
 
@@ -447,7 +454,7 @@ export const buildReportPdfBlob = (payload: {
     date: 'session_date' in session ? session.session_date : session.date,
     time: 'session_time' in session ? session.session_time : session.time,
     subject: session.subject,
-    note: 'note' in session ? session.note : (session as any).notes,
+    note: getSessionNote(session),
   }));
 
   return buildDocumentPdf({
@@ -466,6 +473,7 @@ export const buildReportPdfBlob = (payload: {
     ],
     summaryTitle: 'Resume perkembangan',
     summary: payload.summary,
+    invoiceNumber: payload.invoiceNumber,
     footerNote: 'CerdasIND report document',
   });
 };

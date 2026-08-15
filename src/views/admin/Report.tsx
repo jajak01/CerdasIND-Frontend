@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileDown, MessageCircle, NotebookPen, RotateCcw, SquareCheckBig } from 'lucide-react';
-import { adminService, type Student, type StudentDocument } from '../../services/admin.service';
-import { buildReportPdfBlob as generateReportPdfBlob, downloadBlob } from '../../utils/documentPdf';
+import { adminService, type DocumentSession, type Student, type StudentDocument } from '../../services/admin.service';
+import { buildReportPdfBlob as generateReportPdfBlob, downloadBlob, getSessionNote } from '../../utils/documentPdf';
 
 const dateFormatter = new Intl.DateTimeFormat('id-ID', {
   day: '2-digit',
@@ -61,16 +61,37 @@ const buildReportMessage = (student: Student, reportNumber: string, summary: str
     'Mohon cek file report terlampir.',
   ].filter(Boolean).join(' ');
 
+// The backend snapshot of a session's "catatan" (`note`) is empty on older
+// deployments. Recover it from the live session list (`notes`) so the report
+// page and its PDF always show the catatan even when the backend doesn't.
+const buildSessionNoteMap = (sessions: Array<{ id: number; notes?: string }>): Record<number, string> => {
+  const map: Record<number, string> = {};
+  sessions.forEach((session) => {
+    if (session.notes) map[session.id] = session.notes;
+  });
+  return map;
+};
+
+const enrichDocumentSessions = (
+  sessions: DocumentSession[] | undefined,
+  noteMap: Record<number, string>,
+): DocumentSession[] =>
+  (sessions || []).map((session) => ({
+    ...session,
+    note: session.note?.trim() || (session.session_id != null ? noteMap[session.session_id] || '' : ''),
+  }));
+
 const buildReportPdfBlob = (
   student: Student,
   report: StudentDocument,
   summary: string,
   invoiceNumber?: string,
+  sessions?: DocumentSession[],
 ) =>
   generateReportPdfBlob({
     documentNumber: report.document_number,
     student,
-    sessions: report.sessions || [],
+    sessions: sessions || report.sessions || [],
     periodStart: report.period_start,
     periodEnd: report.period_end,
     summary,
@@ -91,6 +112,7 @@ const Report: React.FC = () => {
   const pdfUrlRef = useRef('');
   const [savedReports, setSavedReports] = useState<StudentDocument[]>([]);
   const [lastCreatedReport, setLastCreatedReport] = useState<StudentDocument | null>(null);
+  const [sessionNotes, setSessionNotes] = useState<Record<number, string>>({});
 
   useEffect(() => {
     const loadRecords = async () => {
@@ -115,6 +137,7 @@ const Report: React.FC = () => {
       if (!selectedInvoiceId) {
         setSelectedInvoice(null);
         setStudent(null);
+        setSessionNotes({});
         return;
       }
 
@@ -125,13 +148,19 @@ const Report: React.FC = () => {
         if (invoice) {
           const studentDetail = await adminService.getStudentDetail(invoice.student_id);
           setStudent(studentDetail);
+          if (studentDetail) {
+            const sessionList = await adminService.getSessions({ studentId: studentDetail.id });
+            setSessionNotes(buildSessionNoteMap(sessionList));
+          }
         } else {
           setStudent(null);
+          setSessionNotes({});
         }
       } catch (error) {
         console.error('Failed to fetch invoice detail for report', error);
         setSelectedInvoice(null);
         setStudent(null);
+        setSessionNotes({});
       } finally {
         setLoadingInvoice(false);
       }
@@ -207,7 +236,7 @@ const Report: React.FC = () => {
 
     setGenerating(true);
     try {
-      const blob = buildReportPdfBlob(student, lastCreatedReport, summary.trim(), selectedInvoice.document_number);
+      const blob = buildReportPdfBlob(student, lastCreatedReport, summary.trim(), selectedInvoice.document_number, enrichedInvoiceSessions);
       const nextUrl = URL.createObjectURL(blob);
 
       if (pdfUrlRef.current) {
@@ -262,11 +291,15 @@ const Report: React.FC = () => {
         return;
       }
 
+      const sessionList = await adminService.getSessions({ studentId: recordStudent.id });
+      const enrichedSessions = enrichDocumentSessions(record.sessions, buildSessionNoteMap(sessionList));
+
       const blob = buildReportPdfBlob(
         recordStudent,
         record,
         record.summary || '',
         linkedInvoice?.document_number || record.linked_invoice_number || '-',
+        enrichedSessions,
       );
       downloadBlob(blob, `report-${record.document_number.replace(/[^\w]+/g, '-').toLowerCase()}.pdf`);
     } catch (error) {
@@ -279,6 +312,11 @@ const Report: React.FC = () => {
     if (!selectedInvoice) return '-';
     return `${selectedInvoice.document_number} - ${selectedInvoice.student_name || '-'}`;
   }, [selectedInvoice]);
+
+  const enrichedInvoiceSessions = useMemo(
+    () => enrichDocumentSessions(selectedInvoice?.sessions, sessionNotes),
+    [selectedInvoice, sessionNotes],
+  );
 
   if (loading) {
     return <div className="container py-8">Loading...</div>;
@@ -368,9 +406,9 @@ const Report: React.FC = () => {
             </div>
           </div>
 
-          {selectedInvoice?.sessions?.length ? (
+          {enrichedInvoiceSessions.length ? (
             <div className="invoice-session-list">
-              {selectedInvoice.sessions.map((session, index) => (
+              {enrichedInvoiceSessions.map((session, index) => (
                 <div key={session.id ?? `${session.session_date}-${session.session_time}-${index}`} className="invoice-session-item is-checked">
                   <div className="invoice-session-content">
                     <div className="invoice-session-topline">
@@ -378,7 +416,7 @@ const Report: React.FC = () => {
                       <span>{formatTime(session.session_time)}</span>
                     </div>
                     <div className="invoice-session-title">{session.subject || '-'}</div>
-                    <div className="invoice-session-footnote">Catatan: {session.note?.trim() || '-'}</div>
+                    <div className="invoice-session-footnote">Catatan: {getSessionNote(session) || '-'}</div>
                   </div>
                 </div>
               ))}
